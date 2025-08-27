@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"xfloor/music-box-backend/internal/server"
+)
 
 func main() {
-	fmt.Printf("Start server")
+	server.NewServer()
 }
