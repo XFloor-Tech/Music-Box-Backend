@@ -37,7 +37,7 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 	//		return nil, err
 	//	}
 	//
-	//	// Setup middleware
+	// Setup middleware
 	//	s.setupMiddleware()
 	//
 	//	// Setup routes
