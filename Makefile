@@ -6,7 +6,7 @@ BIN=bin/api
 
 # Run with hot reload
 run:
-	@air
+	go tool air
 
 # Build binary
 build:
@@ -32,3 +32,7 @@ fmt:
 # Generate sqlc code
 sqlc:
 	sqlc generate
+
+# Generate swagger docs
+swagger:
+	swag init -g cmd/api/main.go

@@ -3,36 +3,35 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
+
+	"xfloor/music-box-backend/config"
 	"xfloor/music-box-backend/internal/server"
 )
 
 func main() {
-	// Initialize logger
 	logger, err := zap.NewProduction()
 	if err != nil {
 		panic(fmt.Sprintf("failed to initialize logger: %v", err))
 	}
 	defer logger.Sync()
 
-	//	// Load configuration
-	//	if err := loadConfig(); err != nil {
-	//		logger.Fatal("failed to load config", zap.Error(err))
-	//	}
-	//
-	// Create server
+	if err := config.Load(); err != nil {
+		logger.Fatal("failed to load config", zap.Error(err))
+	}
+
 	srv, err := server.NewServer(logger)
 	if err != nil {
 		logger.Fatal("failed to create server", zap.Error(err))
 	}
 
-	// Start server in goroutine
 	go func() {
 		port := viper.GetString("server.port")
 		if port == "" {
@@ -45,7 +44,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
