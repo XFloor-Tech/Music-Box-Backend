@@ -1,5 +1,5 @@
 APP_NAME=music-box-backend
-BIN=tmp/main
+BIN=bin/api
 
 # Default task
 .DEFAULT_GOAL := run
@@ -10,7 +10,7 @@ run:
 
 # Build binary
 build:
-	go build -o $(BIN) ./cmd/app
+	go build -o $(BIN) ./cmd/api
 
 # Run without hot reload
 start: build
@@ -18,7 +18,7 @@ start: build
 
 # Clean build files
 clean:
-	rm -rf tmp
+	rm -rf bin
 
 # Run tests
 test:
