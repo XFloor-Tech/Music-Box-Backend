@@ -11,11 +11,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// r.Use(middleware.RealIP) // deprecated
 	r.Use(ZapLogger(s.logger))
 	r.Use(Recovery(s.logger))
 
 	r.Get("/health", s.healthCheck)
+	s.registerSwaggerRoutes(r)
 
 	return r
 }

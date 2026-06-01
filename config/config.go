@@ -9,6 +9,7 @@ import (
 
 func Load() error {
 	viper.SetDefault("server.port", "8080")
+	viper.SetDefault("server.backend_uri", "")
 
 	viper.SetConfigFile(".env.development")
 	viper.SetConfigType("env")
@@ -21,6 +22,7 @@ func Load() error {
 	}
 
 	viper.RegisterAlias("server.port", "SERVER_PORT")
+	viper.RegisterAlias("server.backend_uri", "SERVER_BACKEND_URI")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 

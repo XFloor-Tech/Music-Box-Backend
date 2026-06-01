@@ -1,4 +1,33 @@
+basePath: /
+definitions:
+  server.healthResponse:
+    properties:
+      service:
+        example: music-player
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
 info:
   contact: {}
-paths: {}
+  description: Backend service for the Music Box project.
+  title: Music Box Backend API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      description: Returns service health status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.healthResponse'
+      summary: Health check
+      tags:
+      - health
+schemes:
+- http
 swagger: "2.0"

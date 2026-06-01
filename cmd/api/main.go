@@ -16,6 +16,11 @@ import (
 	"xfloor/music-box-backend/internal/server"
 )
 
+// @title Music Box Backend API
+// @version 0.1.0
+// @description Backend service for the Music Box project.
+// @schemes http
+// @BasePath /
 func main() {
 	logger, err := zap.NewProduction()
 	if err != nil {
