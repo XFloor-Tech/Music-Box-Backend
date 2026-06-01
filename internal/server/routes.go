@@ -1,0 +1,21 @@
+package server
+
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+func (s *Server) RegisterRoutes() http.Handler {
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(ZapLogger(s.logger))
+	r.Use(Recovery(s.logger))
+
+	r.Get("/health", s.healthCheck)
+
+	return r
+}

@@ -1,0 +1,1 @@
+-- PostgreSQL schema for Music Box lives here.

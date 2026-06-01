@@ -2,17 +2,17 @@ package server
 
 import (
 	"context"
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 	"net/http"
 	"time"
+
+	"go.uber.org/zap"
+
+	"xfloor/music-box-backend/internal/database"
 )
 
 type Server struct {
-	router  chi.Router
 	httpSrv *http.Server
-	db      *pgxpool.Pool
+	db      database.Service
 	logger  *zap.Logger
 
 	// Services
@@ -24,31 +24,10 @@ type Server struct {
 func NewServer(logger *zap.Logger) (*Server, error) {
 	s := &Server{
 		logger: logger,
-		router: chi.NewRouter(),
 	}
 
-	// Initialize database
-	//	if err := s.initDatabase(); err != nil {
-	//		return nil, err
-	//	}
-	//
-	//	// Initialize services
-	//	if err := s.initServices(); err != nil {
-	//		return nil, err
-	//	}
-	//
-	// Setup middleware
-	//	s.setupMiddleware()
-	//
-	//	// Setup routes
-	//	s.setupRoutes()
-
-	// Health check
-	s.router.Get("/health", healthCheck)
-
-	// Create HTTP server
 	s.httpSrv = &http.Server{
-		Handler:      s.router,
+		Handler:      s.RegisterRoutes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -72,11 +51,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return err
 	}
 
-	// Close database connections
-	//	if s.db != nil {
-	//		s.logger.Info("closing database connections...")
-	//		s.db.Close()
-	//	}
+	if s.db != nil {
+		s.logger.Info("closing database connections...")
+		if err := s.db.Close(); err != nil {
+			s.logger.Error("database shutdown error", zap.Error(err))
+			return err
+		}
+	}
 
 	s.logger.Info("server shutdown completed")
 	return nil

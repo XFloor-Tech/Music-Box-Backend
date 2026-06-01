@@ -10,13 +10,8 @@ import (
 func Load() error {
 	viper.SetDefault("server.port", "8080")
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
+	viper.SetConfigFile(".env.development")
+	viper.SetConfigType("env")
 
 	if err := viper.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError
@@ -24,6 +19,10 @@ func Load() error {
 			return err
 		}
 	}
+
+	viper.RegisterAlias("server.port", "SERVER_PORT")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	return nil
 }
