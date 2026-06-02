@@ -11,6 +11,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	r.Use(middleware.RequestSize(s.maxBodyBytes))
 	// r.Use(middleware.RealIP) // deprecated
 	r.Use(ZapLogger(s.logger))
 	r.Use(Recovery(s.logger))
