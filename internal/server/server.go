@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
@@ -17,6 +18,7 @@ type Server struct {
 	db           database.Service
 	logger       *zap.Logger
 	maxBodyBytes int64
+	validator    *validator.Validate
 
 	// Services
 	//	authService  *auth.Service
@@ -52,6 +54,7 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		logger:       logger,
 		db:           db,
 		maxBodyBytes: maxBodyBytes,
+		validator:    NewRequestValidator(),
 	}
 
 	s.httpSrv = &http.Server{

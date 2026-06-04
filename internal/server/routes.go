@@ -12,6 +12,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RequestSize(s.maxBodyBytes))
+	r.Use(Validation(s.validator))
 	// r.Use(middleware.RealIP) // deprecated
 	r.Use(ZapLogger(s.logger))
 	r.Use(Recovery(s.logger))
