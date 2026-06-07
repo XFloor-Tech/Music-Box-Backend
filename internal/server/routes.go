@@ -17,7 +17,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Use(ZapLogger(s.logger))
 	r.Use(Recovery(s.logger))
 
+	if s.auth != nil {
+		r.Use(s.auth.LoadClientStateMiddleware)
+		s.auth.RegisterRoutes(r)
+	}
+
 	r.Get("/health", s.healthCheck)
+
 	s.registerSwaggerRoutes(r)
 
 	return r
