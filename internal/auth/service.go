@@ -11,6 +11,7 @@ import (
 	"github.com/aarondl/authboss/v3"
 	_ "github.com/aarondl/authboss/v3/auth"
 	"github.com/aarondl/authboss/v3/defaults"
+	_ "github.com/aarondl/authboss/v3/logout"
 	_ "github.com/aarondl/authboss/v3/register"
 	"github.com/go-chi/chi/v5"
 
@@ -20,8 +21,10 @@ import (
 const (
 	signinRoute          = "/signin"
 	signupRoute          = "/signup"
+	logoutRoute          = "/logout"
 	authbossLoginPath    = "/login"
 	authbossRegisterPath = "/register"
+	authbossLogoutPath   = "/logout"
 )
 
 // Module keeps Authboss and the companion token/session helpers together.
@@ -42,7 +45,7 @@ func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, 
 	}
 
 	ab := authboss.New()
-	ab.Config.Core.ViewRenderer = defaults.JSONRenderer{}
+	ab.Config.Core.ViewRenderer = newSuccessJSONRenderer()
 	defaults.SetCore(&ab.Config, true, false)
 
 	ab.Config.Paths.Mount = cfg.MountPath
@@ -77,7 +80,7 @@ func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, 
 	}
 	module.registerEvents()
 
-	if err := ab.Init("auth", "register"); err != nil {
+	if err := ab.Init("auth", "register", "logout"); err != nil {
 		return nil, fmt.Errorf("initialize authboss: %w", err)
 	}
 
@@ -107,6 +110,7 @@ func (m *Module) RegisterRoutes(r chi.Router, signinMiddleware, signupMiddleware
 
 	r.With(optionalMiddleware(signinMiddleware)).Post(signinRoute, m.authbossRoute(authbossLoginPath))
 	r.With(optionalMiddleware(signupMiddleware)).Post(signupRoute, m.authbossRoute(authbossRegisterPath))
+	r.Delete(logoutRoute, m.authbossRoute(authbossLogoutPath))
 }
 
 func optionalMiddleware(middleware func(http.Handler) http.Handler) func(http.Handler) http.Handler {
@@ -155,6 +159,50 @@ func (m *Module) registerEvents() {
 	m.ab.Events.After(authboss.EventRegister, func(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
 		return m.respondWithAuthToken(w, r, handled, http.StatusCreated)
 	})
+
+	m.ab.Events.After(authboss.EventLogout, func(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
+		return m.respondWithLogout(w, r, handled)
+	})
+}
+
+func (m *Module) respondWithLogout(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
+	if handled {
+		return true, nil
+	}
+
+	if err := m.revokeBearerSession(r); err != nil {
+		return false, err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(LogoutResponse{
+		Success: true,
+		Status:  "success",
+		Data:    LogoutResponseData{},
+	}); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (m *Module) revokeBearerSession(r *http.Request) error {
+	if m == nil || m.tokens == nil || m.storer == nil {
+		return nil
+	}
+
+	token := bearerToken(r.Header.Get("Authorization"))
+	if token == "" {
+		return nil
+	}
+
+	verified, err := m.tokens.Verify(token)
+	if err != nil {
+		return nil
+	}
+
+	return m.storer.DeleteSession(r.Context(), verified.UserID, verified.TokenID)
 }
 
 func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, handled bool, statusCode int) (bool, error) {
@@ -193,15 +241,18 @@ func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, ha
 	}
 
 	response := AuthResponse{
-		Status:    "success",
-		Token:     issued.Token,
-		TokenType: "Bearer",
-		ExpiresAt: issued.ExpiresAt,
-		User: AuthUserResponse{
-			ID:            authUser.ID,
-			Email:         authUser.PID,
-			Name:          authUser.Name,
-			EmailVerified: authUser.EmailVerified,
+		Success: true,
+		Status:  "success",
+		Data: AuthResponseData{
+			Token:     issued.Token,
+			TokenType: "Bearer",
+			ExpiresAt: issued.ExpiresAt,
+			User: AuthUserResponse{
+				ID:            authUser.ID,
+				Email:         authUser.PID,
+				Name:          authUser.Name,
+				EmailVerified: authUser.EmailVerified,
+			},
 		},
 	}
 

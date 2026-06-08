@@ -54,7 +54,10 @@ func writeAuthError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(AuthErrorResponse{
-		Status: "failure",
-		Error:  message,
+		Success: false,
+		Status:  "failure",
+		Data: AuthErrorData{
+			Error: message,
+		},
 	})
 }

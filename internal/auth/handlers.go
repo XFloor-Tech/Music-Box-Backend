@@ -21,7 +21,12 @@ type AuthUserResponse struct {
 }
 
 type AuthResponse struct {
-	Status    string           `json:"status" example:"success"`
+	Success bool             `json:"success" example:"true"`
+	Status  string           `json:"status" example:"success"`
+	Data    AuthResponseData `json:"data"`
+}
+
+type AuthResponseData struct {
 	Token     string           `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
 	TokenType string           `json:"token_type" example:"Bearer"`
 	ExpiresAt time.Time        `json:"expires_at"`
@@ -29,9 +34,22 @@ type AuthResponse struct {
 }
 
 type AuthErrorResponse struct {
-	Status string `json:"status" example:"failure"`
-	Error  string `json:"error" example:"authentication required"`
+	Success bool          `json:"success" example:"false"`
+	Status  string        `json:"status" example:"failure"`
+	Data    AuthErrorData `json:"data"`
 }
+
+type AuthErrorData struct {
+	Error string `json:"error" example:"authentication required"`
+}
+
+type LogoutResponse struct {
+	Success bool               `json:"success" example:"true"`
+	Status  string             `json:"status" example:"success"`
+	Data    LogoutResponseData `json:"data"`
+}
+
+type LogoutResponseData struct{}
 
 // signinDoc godoc
 // @Summary Sign in
@@ -57,3 +75,13 @@ func signinDoc() {}
 // @Failure 400 {object} AuthErrorResponse
 // @Router /signup [post]
 func signupDoc() {}
+
+// logoutDoc godoc
+// @Summary Log out
+// @Description Clears Authboss session state and revokes the current bearer-token session when one is provided.
+// @Tags auth
+// @Produce json
+// @Success 200 {object} LogoutResponse
+// @Failure 500 {object} AuthErrorResponse
+// @Router /logout [delete]
+func logoutDoc() {}

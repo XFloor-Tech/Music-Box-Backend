@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,21 @@ func TestWithValidatedJSONRejectsUnknownAuthFields(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+
+	data := map[string]any{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &data); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if data["success"] != false {
+		t.Fatalf("success = %v, want false", data["success"])
+	}
+	payload, ok := data["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %T, want object", data["data"])
+	}
+	if payload["error"] == "" {
+		t.Fatal("data.error is empty")
 	}
 }
 

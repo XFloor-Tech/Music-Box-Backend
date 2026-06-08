@@ -25,14 +25,20 @@ type ValidationFieldError struct {
 }
 
 type ValidationError struct {
-	Message string                 `json:"error"`
-	Fields  []ValidationFieldError `json:"fields,omitempty"`
+	Success bool                `json:"success"`
+	Status  string              `json:"status"`
+	Data    ValidationErrorData `json:"data"`
 
 	statusCode int
 }
 
+type ValidationErrorData struct {
+	Error  string                 `json:"error"`
+	Fields []ValidationFieldError `json:"fields,omitempty"`
+}
+
 func (err *ValidationError) Error() string {
-	return err.Message
+	return err.Data.Error
 }
 
 func (err *ValidationError) StatusCode() int {
@@ -92,7 +98,7 @@ func DecodeAndValidateJSON[T any](r *http.Request) (T, error) {
 
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return payload, &ValidationError{
-			Message:    "request body must contain a single JSON value",
+			Data:       ValidationErrorData{Error: "request body must contain a single JSON value"},
 			statusCode: http.StatusBadRequest,
 		}
 	}
@@ -145,7 +151,7 @@ func WithValidatedParams[T any](parse func(*http.Request) (T, error)) func(http.
 			params, err := parse(r)
 			if err != nil {
 				WriteValidationError(w, &ValidationError{
-					Message:    fmt.Sprintf("invalid request params: %s", err.Error()),
+					Data:       ValidationErrorData{Error: fmt.Sprintf("invalid request params: %s", err.Error())},
 					statusCode: http.StatusBadRequest,
 				})
 				return
@@ -177,13 +183,15 @@ func WriteValidationError(w http.ResponseWriter, err error) {
 	var validationErr *ValidationError
 	if !errors.As(err, &validationErr) {
 		validationErr = &ValidationError{
-			Message:    "invalid request",
+			Data:       ValidationErrorData{Error: "invalid request"},
 			statusCode: http.StatusBadRequest,
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(validationErr.StatusCode())
+	validationErr.Success = false
+	validationErr.Status = "failure"
 	_ = json.NewEncoder(w).Encode(validationErr)
 }
 
@@ -200,8 +208,7 @@ func validationErrorFrom(err error) error {
 		}
 
 		return &ValidationError{
-			Message:    "request validation failed",
-			Fields:     fields,
+			Data:       ValidationErrorData{Error: "request validation failed", Fields: fields},
 			statusCode: http.StatusBadRequest,
 		}
 	}
@@ -212,20 +219,20 @@ func validationErrorFrom(err error) error {
 func requestBodyError(err error) error {
 	if errors.Is(err, io.EOF) {
 		return &ValidationError{
-			Message:    "request body is required",
+			Data:       ValidationErrorData{Error: "request body is required"},
 			statusCode: http.StatusBadRequest,
 		}
 	}
 
 	if strings.Contains(err.Error(), "http: request body too large") {
 		return &ValidationError{
-			Message:    "request body is too large",
+			Data:       ValidationErrorData{Error: "request body is too large"},
 			statusCode: http.StatusRequestEntityTooLarge,
 		}
 	}
 
 	return &ValidationError{
-		Message:    fmt.Sprintf("invalid request body: %s", err.Error()),
+		Data:       ValidationErrorData{Error: fmt.Sprintf("invalid request body: %s", err.Error())},
 		statusCode: http.StatusBadRequest,
 	}
 }

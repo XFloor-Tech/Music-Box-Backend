@@ -330,6 +330,18 @@ WHERE "userId" = $1 AND token = $2 AND "expiresAt" > NOW()
 	return err
 }
 
+func (s *PostgresStorer) DeleteSession(ctx context.Context, userID, token string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(token) == "" {
+		return nil
+	}
+
+	_, err := s.repo.Exec(ctx, `
+DELETE FROM "session"
+WHERE "userId" = $1 AND token = $2
+`, userID, token)
+	return err
+}
+
 func (s *PostgresStorer) AddRememberToken(ctx context.Context, pid, token string) error {
 	user, err := s.loadAuthUser(ctx, pid)
 	if err != nil {
