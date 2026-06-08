@@ -343,15 +343,22 @@ WHERE "userId" = $1 AND token = $2
 }
 
 func (s *PostgresStorer) AddRememberToken(ctx context.Context, pid, token string) error {
+	return s.AddRememberTokenWithTTL(ctx, pid, token, defaultRefreshTokenTTL)
+}
+
+func (s *PostgresStorer) AddRememberTokenWithTTL(ctx context.Context, pid, token string, ttl time.Duration) error {
 	user, err := s.loadAuthUser(ctx, pid)
 	if err != nil {
 		return err
+	}
+	if ttl <= 0 {
+		ttl = defaultRefreshTokenTTL
 	}
 
 	return s.CreateSession(ctx, Session{
 		UserID:    user.ID,
 		Token:     token,
-		ExpiresAt: time.Now().UTC().Add(defaultCookieStateMaxAge),
+		ExpiresAt: time.Now().UTC().Add(ttl),
 	})
 }
 
@@ -379,7 +386,7 @@ func (s *PostgresStorer) UseRememberToken(ctx context.Context, pid, token string
 
 	tag, err := s.repo.Exec(ctx, `
 DELETE FROM "session"
-WHERE "userId" = $1 AND token = $2
+WHERE "userId" = $1 AND token = $2 AND "expiresAt" > NOW()
 `, user.ID, token)
 	if err != nil {
 		return err

@@ -21,6 +21,7 @@ import (
 const (
 	signinRoute          = "/signin"
 	signupRoute          = "/signup"
+	refreshRoute         = "/refresh"
 	logoutRoute          = "/logout"
 	authbossLoginPath    = "/login"
 	authbossRegisterPath = "/register"
@@ -32,6 +33,7 @@ type Module struct {
 	ab     *authboss.Authboss
 	storer *PostgresStorer
 	tokens *TokenService
+	config Config
 }
 
 func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, error) {
@@ -77,6 +79,7 @@ func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, 
 		ab:     ab,
 		storer: storer,
 		tokens: NewTokenService(cfg.JWT),
+		config: cfg,
 	}
 	module.registerEvents()
 
@@ -110,6 +113,7 @@ func (m *Module) RegisterRoutes(r chi.Router, signinMiddleware, signupMiddleware
 
 	r.With(optionalMiddleware(signinMiddleware)).Post(signinRoute, m.authbossRoute(authbossLoginPath))
 	r.With(optionalMiddleware(signupMiddleware)).Post(signupRoute, m.authbossRoute(authbossRegisterPath))
+	r.Post(refreshRoute, m.refreshToken)
 	r.Delete(logoutRoute, m.authbossRoute(authbossLogoutPath))
 }
 
@@ -173,6 +177,9 @@ func (m *Module) respondWithLogout(w http.ResponseWriter, r *http.Request, handl
 	if err := m.revokeBearerSession(r); err != nil {
 		return false, err
 	}
+	if err := m.revokeRefreshToken(w, r); err != nil {
+		return false, err
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -224,36 +231,15 @@ func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, ha
 		return false, err
 	}
 
-	issued, err := m.tokens.Issue(authUser.ID, pid)
+	data, err := m.issueAuthTokens(w, r, authUser, pid)
 	if err != nil {
-		return false, err
-	}
-
-	ipAddress, userAgent := requestSessionMetadata(r)
-	if err := m.storer.CreateSession(r.Context(), Session{
-		UserID:    authUser.ID,
-		Token:     issued.TokenID,
-		ExpiresAt: issued.ExpiresAt,
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
-	}); err != nil {
 		return false, err
 	}
 
 	response := AuthResponse{
 		Success: true,
 		Status:  "success",
-		Data: AuthResponseData{
-			Token:     issued.Token,
-			TokenType: "Bearer",
-			ExpiresAt: issued.ExpiresAt,
-			User: AuthUserResponse{
-				ID:            authUser.ID,
-				Email:         authUser.PID,
-				Name:          authUser.Name,
-				EmailVerified: authUser.EmailVerified,
-			},
-		},
+		Data:    data,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

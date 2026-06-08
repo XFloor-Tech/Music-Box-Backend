@@ -12,25 +12,30 @@ import (
 )
 
 const (
-	defaultMountPath             = "/auth"
-	defaultSessionCookieName     = "music_box_session"
-	defaultCookieStateCookieName = "music_box_auth"
-	defaultCookieStateMaxAge     = 30 * 24 * time.Hour
-	defaultJWTIssuer             = "music-box-backend"
-	defaultJWTAudience           = "music-box"
-	defaultJWTTTL                = time.Hour
+	defaultMountPath              = "/auth"
+	defaultSessionCookieName      = "music_box_session"
+	defaultCookieStateCookieName  = "music_box_auth"
+	defaultCookieStateMaxAge      = 30 * 24 * time.Hour
+	defaultCookieSecure           = true
+	defaultJWTIssuer              = "music-box-backend"
+	defaultJWTAudience            = "music-box"
+	defaultJWTTTL                 = 15 * time.Minute
+	defaultRefreshTokenCookieName = "music_box_refresh"
+	defaultRefreshTokenTTL        = 30 * 24 * time.Hour
 )
 
 type Config struct {
-	MountPath             string
-	RootURL               string
-	SessionCookieName     string
-	CookieStateCookieName string
-	CookieSecret          []byte
-	CookieSecure          bool
-	CookieSameSite        http.SameSite
-	CookieStateMaxAge     int
-	JWT                   TokenConfig
+	MountPath              string
+	RootURL                string
+	SessionCookieName      string
+	CookieStateCookieName  string
+	RefreshTokenCookieName string
+	CookieSecret           []byte
+	CookieSecure           bool
+	CookieSameSite         http.SameSite
+	CookieStateMaxAge      int
+	RefreshTokenTTL        time.Duration
+	JWT                    TokenConfig
 }
 
 func GetConfig() (Config, error) {
@@ -55,20 +60,32 @@ func GetConfig() (Config, error) {
 		cookieStateMaxAge = defaultCookieStateMaxAge
 	}
 
+	refreshTokenTTL := viper.GetDuration("auth.refresh_token_ttl")
+	if refreshTokenTTL <= 0 {
+		refreshTokenTTL = defaultRefreshTokenTTL
+	}
+
 	sameSite, err := sameSiteFromString(viper.GetString("auth.cookie_same_site"))
 	if err != nil {
 		return Config{}, err
 	}
 
+	cookieSecure := defaultCookieSecure
+	if viper.IsSet("auth.cookie_secure") {
+		cookieSecure = viper.GetBool("auth.cookie_secure")
+	}
+
 	cfg := Config{
-		MountPath:             valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
-		RootURL:               authRootURL(),
-		SessionCookieName:     valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
-		CookieStateCookieName: valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
-		CookieSecret:          cookieSecret,
-		CookieSecure:          viper.GetBool("auth.cookie_secure"),
-		CookieSameSite:        sameSite,
-		CookieStateMaxAge:     int(cookieStateMaxAge.Seconds()),
+		MountPath:              valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
+		RootURL:                authRootURL(),
+		SessionCookieName:      valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
+		CookieStateCookieName:  valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
+		RefreshTokenCookieName: valueOrDefault(viper.GetString("auth.refresh_token_cookie_name"), defaultRefreshTokenCookieName),
+		CookieSecret:           cookieSecret,
+		CookieSecure:           cookieSecure,
+		CookieSameSite:         sameSite,
+		CookieStateMaxAge:      int(cookieStateMaxAge.Seconds()),
+		RefreshTokenTTL:        refreshTokenTTL,
 		JWT: TokenConfig{
 			Secret:   jwtKey,
 			Issuer:   valueOrDefault(viper.GetString("auth.jwt_issuer"), defaultJWTIssuer),
@@ -79,6 +96,9 @@ func GetConfig() (Config, error) {
 
 	if cfg.SessionCookieName == cfg.CookieStateCookieName {
 		return Config{}, fmt.Errorf("auth session and cookie state names must be different")
+	}
+	if cfg.RefreshTokenCookieName == cfg.SessionCookieName || cfg.RefreshTokenCookieName == cfg.CookieStateCookieName {
+		return Config{}, fmt.Errorf("auth refresh token cookie name must be different from other auth cookie names")
 	}
 
 	return cfg, nil
