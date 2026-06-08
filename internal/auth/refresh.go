@@ -1,21 +1,22 @@
 package auth
 
 import (
-	"bytes"
+	"crypto/rand"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aarondl/authboss/v3"
-	"github.com/aarondl/authboss/v3/remember"
 )
 
+const refreshTokenBytes = 32
+
 type refreshTokenData struct {
-	PID  string
 	Hash string
 }
 
@@ -41,20 +42,10 @@ func (m *Module) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := m.storer.loadAuthUser(r.Context(), refreshData.PID)
-	if errors.Is(err, authboss.ErrUserNotFound) {
-		m.clearRefreshTokenCookie(w)
-		writeAuthError(w, http.StatusUnauthorized, "refresh token is invalid")
-		return
-	}
+	user, err := m.storer.UseRefreshToken(r.Context(), refreshData.Hash)
 	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "failed to load authenticated user")
-		return
-	}
-
-	if err := m.storer.UseRememberToken(r.Context(), refreshData.PID, refreshData.Hash); err != nil {
 		m.clearRefreshTokenCookie(w)
-		if errors.Is(err, authboss.ErrTokenNotFound) {
+		if errors.Is(err, authboss.ErrTokenNotFound) || errors.Is(err, authboss.ErrUserNotFound) {
 			writeAuthError(w, http.StatusUnauthorized, "refresh token is invalid")
 			return
 		}
@@ -99,7 +90,7 @@ func (m *Module) issueAuthTokens(w http.ResponseWriter, r *http.Request, authUse
 		return AuthResponseData{}, err
 	}
 
-	refreshExpiresAt, err := m.issueRefreshToken(w, r, pid)
+	refreshExpiresAt, err := m.issueRefreshToken(w, r, authUser)
 	if err != nil {
 		return AuthResponseData{}, err
 	}
@@ -118,16 +109,26 @@ func (m *Module) issueAuthTokens(w http.ResponseWriter, r *http.Request, authUse
 	}, nil
 }
 
-func (m *Module) issueRefreshToken(w http.ResponseWriter, r *http.Request, pid string) (time.Time, error) {
-	pid = normalizeEmail(pid)
-	hash, token, err := remember.GenerateToken(pid)
+func (m *Module) issueRefreshToken(w http.ResponseWriter, r *http.Request, authUser *User) (time.Time, error) {
+	if authUser == nil {
+		return time.Time{}, fmt.Errorf("auth user is required")
+	}
+
+	hash, token, err := newRefreshToken()
 	if err != nil {
 		return time.Time{}, err
 	}
 
 	ttl := m.refreshTokenTTL()
 	expiresAt := time.Now().UTC().Add(ttl)
-	if err := m.storer.AddRememberTokenWithTTL(r.Context(), pid, hash, ttl); err != nil {
+	ipAddress, userAgent := requestSessionMetadata(r)
+	if err := m.storer.CreateSession(r.Context(), Session{
+		UserID:    authUser.ID,
+		Token:     hash,
+		ExpiresAt: expiresAt,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+	}); err != nil {
 		return time.Time{}, err
 	}
 
@@ -155,7 +156,7 @@ func (m *Module) revokeRefreshToken(w http.ResponseWriter, r *http.Request) erro
 		return nil
 	}
 
-	if err := m.storer.UseRememberToken(r.Context(), refreshData.PID, refreshData.Hash); err != nil &&
+	if _, err := m.storer.UseRefreshToken(r.Context(), refreshData.Hash); err != nil &&
 		!errors.Is(err, authboss.ErrTokenNotFound) &&
 		!errors.Is(err, authboss.ErrUserNotFound) {
 		return err
@@ -197,24 +198,41 @@ func (m *Module) refreshTokenTTL() time.Duration {
 }
 
 func refreshTokenDataFromCookieValue(value string) (refreshTokenData, error) {
-	rawToken, err := base64.URLEncoding.DecodeString(value)
+	hash, err := refreshTokenHash(value)
 	if err != nil {
 		return refreshTokenData{}, err
 	}
 
-	index := bytes.IndexByte(rawToken, ';')
-	if index < 0 {
-		return refreshTokenData{}, errors.New("invalid refresh token")
-	}
-
-	pid := normalizeEmail(string(rawToken[:index]))
-	if pid == "" {
-		return refreshTokenData{}, errors.New("refresh token pid is required")
-	}
-
-	sum := sha512.Sum512(rawToken)
 	return refreshTokenData{
-		PID:  pid,
-		Hash: base64.StdEncoding.EncodeToString(sum[:]),
+		Hash: hash,
 	}, nil
+}
+
+func newRefreshToken() (hash, token string, err error) {
+	raw := make([]byte, refreshTokenBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", fmt.Errorf("generate refresh token: %w", err)
+	}
+
+	token = base64.RawURLEncoding.EncodeToString(raw)
+	hash, err = refreshTokenHash(token)
+	if err != nil {
+		return "", "", err
+	}
+
+	return hash, token, nil
+}
+
+func refreshTokenHash(token string) (string, error) {
+	token = strings.TrimSpace(token)
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return "", err
+	}
+	if len(raw) != refreshTokenBytes {
+		return "", errors.New("invalid refresh token length")
+	}
+
+	sum := sha512.Sum512(raw)
+	return base64.StdEncoding.EncodeToString(sum[:]), nil
 }

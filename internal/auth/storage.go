@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -398,6 +399,28 @@ WHERE "userId" = $1 AND token = $2 AND "expiresAt" > NOW()
 	return nil
 }
 
+func (s *PostgresStorer) UseRefreshToken(ctx context.Context, token string) (*User, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, authboss.ErrTokenNotFound
+	}
+
+	var userID string
+	err := s.repo.QueryRow(ctx, `
+DELETE FROM "session"
+WHERE token = $1 AND "expiresAt" > NOW()
+RETURNING "userId"
+`, token).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, authboss.ErrTokenNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return s.LoadByID(ctx, userID)
+}
+
 func (s *PostgresStorer) userForSave(ctx context.Context, user authboss.User, email string) (*User, error) {
 	if stored, ok := user.(*User); ok && stored.ID != "" {
 		return stored, nil
@@ -425,12 +448,9 @@ func requestSessionMetadata(r *http.Request) (ipAddress, userAgent string) {
 		return "", ""
 	}
 
-	ipAddress = r.Header.Get("X-Forwarded-For")
-	if ipAddress != "" {
-		ipAddress = strings.TrimSpace(strings.Split(ipAddress, ",")[0])
-	}
-	if ipAddress == "" {
-		ipAddress = strings.TrimSpace(r.RemoteAddr)
+	ipAddress = strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(ipAddress); err == nil {
+		ipAddress = host
 	}
 
 	return ipAddress, r.UserAgent()

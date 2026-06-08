@@ -88,8 +88,15 @@ func (s *TokenService) Verify(rawToken string) (VerifiedToken, error) {
 	token, err := jwt.Parse(
 		[]byte(rawToken),
 		jwt.WithKey(jwa.HS256(), s.config.Secret),
+		jwt.WithValidate(true),
 		jwt.WithIssuer(s.config.Issuer),
 		jwt.WithAudience(s.config.Audience),
+		jwt.WithRequiredClaim(jwt.ExpirationKey),
+		jwt.WithRequiredClaim(jwt.IssuedAtKey),
+		jwt.WithRequiredClaim(jwt.NotBeforeKey),
+		jwt.WithRequiredClaim(jwt.SubjectKey),
+		jwt.WithRequiredClaim(jwt.JwtIDKey),
+		jwt.WithRequiredClaim(tokenEmailClaim),
 	)
 	if err != nil {
 		return VerifiedToken{}, err

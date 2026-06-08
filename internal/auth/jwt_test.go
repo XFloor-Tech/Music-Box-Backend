@@ -3,6 +3,9 @@ package auth
 import (
 	"testing"
 	"time"
+
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	jwxjwt "github.com/lestrrat-go/jwx/v3/jwt"
 )
 
 func TestTokenServiceIssueAndVerify(t *testing.T) {
@@ -63,5 +66,55 @@ func TestTokenServiceVerifyRejectsWrongAudience(t *testing.T) {
 
 	if _, err := verifier.Verify(issued.Token); err == nil {
 		t.Fatal("Verify() error = nil, want audience validation error")
+	}
+}
+
+func TestTokenServiceVerifyRejectsExpiredToken(t *testing.T) {
+	service := NewTokenService(TokenConfig{
+		Secret:   []byte("test-secret"),
+		Issuer:   "music-box-backend",
+		Audience: "music-box",
+		TTL:      -time.Minute,
+	})
+
+	issued, err := service.Issue("user-id-1", "user@example.com")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	if _, err := service.Verify(issued.Token); err == nil {
+		t.Fatal("Verify() error = nil, want expiration validation error")
+	}
+}
+
+func TestTokenServiceVerifyRejectsMissingExpiration(t *testing.T) {
+	service := NewTokenService(TokenConfig{
+		Secret:   []byte("test-secret"),
+		Issuer:   "music-box-backend",
+		Audience: "music-box",
+		TTL:      time.Hour,
+	})
+	now := time.Now().UTC()
+
+	token, err := jwxjwt.NewBuilder().
+		Issuer("music-box-backend").
+		Subject("user-id-1").
+		Audience([]string{"music-box"}).
+		IssuedAt(now).
+		NotBefore(now).
+		JwtID("token-id-1").
+		Claim(tokenEmailClaim, "user@example.com").
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	signed, err := jwxjwt.Sign(token, jwxjwt.WithKey(jwa.HS256(), []byte("test-secret")))
+	if err != nil {
+		t.Fatalf("Sign() error = %v", err)
+	}
+
+	if _, err := service.Verify(string(signed)); err == nil {
+		t.Fatal("Verify() error = nil, want required expiration claim error")
 	}
 }

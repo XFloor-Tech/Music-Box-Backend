@@ -1,17 +1,16 @@
 package auth
 
 import (
+	"encoding/base64"
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/aarondl/authboss/v3/remember"
 )
 
-func TestRefreshTokenDataFromCookieValueMatchesAuthbossRememberToken(t *testing.T) {
-	hash, token, err := remember.GenerateToken("User@Example.com")
+func TestRefreshTokenDataFromCookieValueMatchesOpaqueToken(t *testing.T) {
+	hash, token, err := newRefreshToken()
 	if err != nil {
-		t.Fatalf("GenerateToken() error = %v", err)
+		t.Fatalf("newRefreshToken() error = %v", err)
 	}
 
 	data, err := refreshTokenDataFromCookieValue(token)
@@ -19,9 +18,6 @@ func TestRefreshTokenDataFromCookieValueMatchesAuthbossRememberToken(t *testing.
 		t.Fatalf("refreshTokenDataFromCookieValue() error = %v", err)
 	}
 
-	if data.PID != "user@example.com" {
-		t.Fatalf("PID = %q, want %q", data.PID, "user@example.com")
-	}
 	if data.Hash != hash {
 		t.Fatalf("Hash = %q, want %q", data.Hash, hash)
 	}
@@ -30,6 +26,13 @@ func TestRefreshTokenDataFromCookieValueMatchesAuthbossRememberToken(t *testing.
 func TestRefreshTokenDataFromCookieValueRejectsInvalidToken(t *testing.T) {
 	if _, err := refreshTokenDataFromCookieValue("not-a-refresh-token"); err == nil {
 		t.Fatal("refreshTokenDataFromCookieValue() error = nil, want error")
+	}
+}
+
+func TestRefreshTokenDataFromCookieValueRejectsShortToken(t *testing.T) {
+	token := base64.RawURLEncoding.EncodeToString([]byte("short"))
+	if _, err := refreshTokenDataFromCookieValue(token); err == nil {
+		t.Fatal("refreshTokenDataFromCookieValue() error = nil, want length error")
 	}
 }
 

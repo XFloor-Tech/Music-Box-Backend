@@ -4,12 +4,12 @@ import "time"
 
 type SigninRequest struct {
 	Email    string `json:"email" validate:"required,email" example:"user@example.com"`
-	Password string `json:"password" validate:"required" example:"P@ssw0rd1"`
+	Password string `json:"password" validate:"required,max=72" example:"P@ssw0rd1"`
 }
 
 type SignupRequest struct {
 	Email           string `json:"email" validate:"required,email" example:"user@example.com"`
-	Password        string `json:"password" validate:"required,min=8" example:"P@ssw0rd1"`
+	Password        string `json:"password" validate:"required,min=8,max=72" example:"P@ssw0rd1"`
 	ConfirmPassword string `json:"confirm_password" validate:"required,eqfield=Password" example:"P@ssw0rd1"`
 }
 

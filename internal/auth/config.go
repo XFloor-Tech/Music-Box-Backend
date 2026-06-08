@@ -22,6 +22,7 @@ const (
 	defaultJWTTTL                 = 15 * time.Minute
 	defaultRefreshTokenCookieName = "music_box_refresh"
 	defaultRefreshTokenTTL        = 30 * 24 * time.Hour
+	minSecretBytes                = 32
 )
 
 type Config struct {
@@ -44,10 +45,13 @@ func GetConfig() (Config, error) {
 		return Config{}, err
 	}
 
-	jwtSecret := strings.TrimSpace(viper.GetString("auth.jwt_secret"))
+	jwtSecret, err := getOptionalSecretFromConfig("auth.jwt_secret")
+	if err != nil {
+		return Config{}, err
+	}
 	jwtKey := cookieSecret
-	if jwtSecret != "" {
-		jwtKey = []byte(jwtSecret)
+	if len(jwtSecret) > 0 {
+		jwtKey = jwtSecret
 	}
 
 	jwtTTL := viper.GetDuration("auth.jwt_ttl")
@@ -73,6 +77,9 @@ func GetConfig() (Config, error) {
 	cookieSecure := defaultCookieSecure
 	if viper.IsSet("auth.cookie_secure") {
 		cookieSecure = viper.GetBool("auth.cookie_secure")
+	}
+	if sameSite == http.SameSiteNoneMode && !cookieSecure {
+		return Config{}, fmt.Errorf("auth.cookie_secure must be true when auth.cookie_same_site is none")
 	}
 
 	cfg := Config{
@@ -105,17 +112,34 @@ func GetConfig() (Config, error) {
 }
 
 func getSecretFromConfig(key string) ([]byte, error) {
-	raw := strings.TrimSpace(viper.GetString(key))
-	if raw != "" {
-		return []byte(raw), nil
+	secret, err := getOptionalSecretFromConfig(key)
+	if err != nil {
+		return nil, err
+	}
+	if len(secret) > 0 {
+		return secret, nil
 	}
 
-	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
+	generated := make([]byte, 32)
+	if _, err := rand.Read(generated); err != nil {
 		return nil, fmt.Errorf("generate auth secret: %w", err)
 	}
 
-	return []byte(base64.RawURLEncoding.EncodeToString(secret)), nil
+	return []byte(base64.RawURLEncoding.EncodeToString(generated)), nil
+}
+
+func getOptionalSecretFromConfig(key string) ([]byte, error) {
+	raw := strings.TrimSpace(viper.GetString(key))
+	if raw == "" {
+		return nil, nil
+	}
+
+	secret := []byte(raw)
+	if len(secret) < minSecretBytes {
+		return nil, fmt.Errorf("%s must be at least %d bytes", key, minSecretBytes)
+	}
+
+	return secret, nil
 }
 
 func sameSiteFromString(value string) (http.SameSite, error) {
