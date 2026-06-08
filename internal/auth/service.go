@@ -100,13 +100,23 @@ func (m *Module) LoadClientStateMiddleware(next http.Handler) http.Handler {
 	return m.ab.LoadClientStateMiddleware(next)
 }
 
-func (m *Module) RegisterRoutes(r chi.Router) {
+func (m *Module) RegisterRoutes(r chi.Router, signinMiddleware, signupMiddleware func(http.Handler) http.Handler) {
 	if m == nil || m.ab == nil {
 		return
 	}
 
-	r.Post(signinRoute, m.authbossRoute(authbossLoginPath))
-	r.Post(signupRoute, m.authbossRoute(authbossRegisterPath))
+	r.With(optionalMiddleware(signinMiddleware)).Post(signinRoute, m.authbossRoute(authbossLoginPath))
+	r.With(optionalMiddleware(signupMiddleware)).Post(signupRoute, m.authbossRoute(authbossRegisterPath))
+}
+
+func optionalMiddleware(middleware func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	if middleware != nil {
+		return middleware
+	}
+
+	return func(next http.Handler) http.Handler {
+		return next
+	}
 }
 
 func (m *Module) authbossRoute(targetPath string) http.HandlerFunc {

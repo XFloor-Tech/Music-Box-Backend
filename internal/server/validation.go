@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -106,12 +107,21 @@ func DecodeAndValidateJSON[T any](r *http.Request) (T, error) {
 func WithValidatedJSON[T any]() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				WriteValidationError(w, requestBodyError(err))
+				return
+			}
+			_ = r.Body.Close()
+
+			r.Body = io.NopCloser(bytes.NewReader(body))
 			payload, err := DecodeAndValidateJSON[T](r)
 			if err != nil {
 				WriteValidationError(w, err)
 				return
 			}
 
+			r.Body = io.NopCloser(bytes.NewReader(body))
 			ctx := context.WithValue(r.Context(), validatedJSONContextKey{}, payload)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

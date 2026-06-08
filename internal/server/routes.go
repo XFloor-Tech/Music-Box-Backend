@@ -5,6 +5,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	authmodule "xfloor/music-box-backend/internal/auth"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -19,7 +21,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	if s.auth != nil {
 		r.Use(s.auth.LoadClientStateMiddleware)
-		s.auth.RegisterRoutes(r)
+		s.auth.RegisterRoutes(
+			r,
+			WithValidatedJSON[authmodule.SigninRequest](),
+			WithValidatedJSON[authmodule.SignupRequest](),
+		)
 	}
 
 	r.Get("/health", s.healthCheck)
