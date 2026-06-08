@@ -58,11 +58,10 @@ func TestSuccessJSONRendererAddsSuccessFalseForFailures(t *testing.T) {
 	if data["status"] != "failure" {
 		t.Fatalf("status = %v, want failure", data["status"])
 	}
-	payload, ok := data["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("data = %T, want object", data["data"])
+	if data["error"] != "problem" {
+		t.Fatalf("error = %v, want problem", data["error"])
 	}
-	if payload["error"] != "problem" {
-		t.Fatalf("data.error = %v, want problem", payload["error"])
+	if _, ok := data["data"]; ok {
+		t.Fatalf("data = %v, want absent", data["data"])
 	}
 }

@@ -40,12 +40,11 @@ func TestWithValidatedJSONRejectsUnknownAuthFields(t *testing.T) {
 	if data["success"] != false {
 		t.Fatalf("success = %v, want false", data["success"])
 	}
-	payload, ok := data["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("data = %T, want object", data["data"])
+	if data["error"] == "" {
+		t.Fatal("error is empty")
 	}
-	if payload["error"] == "" {
-		t.Fatal("data.error is empty")
+	if _, ok := data["data"]; ok {
+		t.Fatalf("data = %v, want absent", data["data"])
 	}
 }
 

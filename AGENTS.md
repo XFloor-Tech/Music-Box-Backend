@@ -39,6 +39,16 @@ and easy to extend as features are added.
 - Use Zap for application and request logging.
 - Keep PostgreSQL access behind service or repository boundaries rather than
   scattering SQL across handlers.
+- Keep public JSON responses wrapped in a consistent envelope:
+  - `success` is mandatory and must be `true` for successful requests and
+    `false` for failed requests.
+  - `status` should describe the outcome, such as `success`, `failure`, or
+    route-specific values like `ok`.
+  - `data` contains only successful response payloads and should be omitted on
+    errors.
+  - `error` is an optional top-level string used only when a request fails.
+  - Error metadata such as validation `fields` may be top-level alongside
+    `error`; do not put error details inside `data`.
 - Update Swagger annotations and regenerate docs when changing public HTTP
   APIs.
 - Follow existing Go formatting conventions with `go fmt ./...`.

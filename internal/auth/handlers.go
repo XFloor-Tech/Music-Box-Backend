@@ -34,13 +34,9 @@ type AuthResponseData struct {
 }
 
 type AuthErrorResponse struct {
-	Success bool          `json:"success" example:"false"`
-	Status  string        `json:"status" example:"failure"`
-	Data    AuthErrorData `json:"data"`
-}
-
-type AuthErrorData struct {
-	Error string `json:"error" example:"authentication required"`
+	Success bool   `json:"success" example:"false"`
+	Status  string `json:"status" example:"failure"`
+	Error   string `json:"error" example:"authentication required"`
 }
 
 type LogoutResponse struct {
