@@ -68,7 +68,7 @@ func TestCSRFProtectionRejectsCookieRequestWithoutOrigin(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodDelete, "/logout", nil)
-	req.Header.Set(csrfProtectionHeader, "1")
+	req.Header.Set(CSRFProtectionHeader, "1")
 	req.AddCookie(&http.Cookie{Name: "music_box_session", Value: "session"})
 	recorder := httptest.NewRecorder()
 
@@ -86,7 +86,7 @@ func TestCSRFProtectionAllowsCustomHeaderAndTrustedOrigin(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodDelete, "/logout", nil)
-	req.Header.Set(csrfProtectionHeader, "1")
+	req.Header.Set(CSRFProtectionHeader, "1")
 	req.Header.Set("Origin", "https://api.example.com")
 	req.AddCookie(&http.Cookie{Name: "music_box_session", Value: "session"})
 	recorder := httptest.NewRecorder()

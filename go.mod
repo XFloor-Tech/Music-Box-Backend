@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/aarondl/authboss/v3 v3.5.3
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/cors v1.2.2
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/spf13/viper v1.20.1

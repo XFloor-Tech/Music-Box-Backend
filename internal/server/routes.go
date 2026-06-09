@@ -13,6 +13,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
+	r.Use(CORS(s.isTrustedOrigin))
 	r.Use(middleware.RequestSize(s.maxBodyBytes))
 	r.Use(Validation(s.validator))
 	// r.Use(middleware.RealIP) // deprecated

@@ -94,6 +94,19 @@ func (m *Module) Authboss() *authboss.Authboss {
 	return m.ab
 }
 
+func (m *Module) IsTrustedOrigin(origin string) bool {
+	if m == nil {
+		return false
+	}
+
+	origin = normalizeRequestOrigin(origin)
+	if origin == "" {
+		return false
+	}
+
+	return m.isTrustedOrigin(origin)
+}
+
 func (m *Module) LoadClientStateMiddleware(next http.Handler) http.Handler {
 	if m == nil || m.ab == nil {
 		return next

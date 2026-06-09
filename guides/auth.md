@@ -224,8 +224,8 @@ frontend origin to `AUTH_TRUSTED_ORIGINS` when the client and API are on
 different origins.
 
 For a split frontend/API deployment that needs cross-site credentialed requests,
-the backend will also need a matching CORS policy. That is still tracked as an
-open auth hardening item. Browser cookies may also require:
+the backend CORS policy allows only origins from `AUTH_TRUSTED_ORIGINS` plus
+`AUTH_ROOT_URL` or `SERVER_BACKEND_URI`. Browser cookies may also require:
 
 ```env
 AUTH_COOKIE_SAME_SITE=none

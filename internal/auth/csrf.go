@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const csrfProtectionHeader = "X-CSRF-Protection"
+const CSRFProtectionHeader = "X-CSRF-Protection"
 
 func (m *Module) CSRFProtection(next http.Handler) http.Handler {
 	if m == nil {
@@ -36,12 +36,12 @@ func (m *Module) validateCSRF(r *http.Request) error {
 	}
 
 	if !hasNonSimpleRequestShape(r) {
-		return fmt.Errorf("unsafe requests must use application/json or %s", csrfProtectionHeader)
+		return fmt.Errorf("unsafe requests must use application/json or %s", CSRFProtectionHeader)
 	}
 
 	origin := requestOrigin(r)
 	if origin != "" {
-		if !m.isTrustedOrigin(origin) {
+		if !m.IsTrustedOrigin(origin) {
 			return errors.New("request origin is not trusted")
 		}
 		return nil
@@ -74,7 +74,7 @@ func hasNonSimpleRequestShape(r *http.Request) bool {
 	}
 
 	return contentType == "application/json" ||
-		r.Header.Get(csrfProtectionHeader) != "" ||
+		r.Header.Get(CSRFProtectionHeader) != "" ||
 		strings.EqualFold(r.Header.Get("X-Requested-With"), "XMLHttpRequest")
 }
 
