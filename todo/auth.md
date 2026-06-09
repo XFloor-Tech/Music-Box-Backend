@@ -4,7 +4,7 @@
 
 - [x] Reject configured `auth.cookie_secret` values shorter than 32 bytes.
 - [x] Reject `auth.cookie_same_site=none` unless `auth.cookie_secure=true`.
-- [x] Cap auth password JSON fields at 72 bytes so bcrypt truncation/length behavior cannot surprise clients.
+- [x] Add password length validators before Authboss hashes credentials.
 - [x] Remove JWT bearer and refresh-token auth from public auth endpoints.
 - [x] Use opaque HttpOnly session cookies backed by hashed rows in the existing `session` table.
 - [x] Add Better Auth-style CSRF checks: reject cross-site fetch metadata, require JSON or a non-simple header for unsafe methods, and validate trusted origins for cookie requests.
@@ -17,6 +17,11 @@
 ## Open items
 
 - [ ] Add rate limiting for `/signin` and `/signup`; use a shared store if the API can run on multiple instances.
+- [ ] Revoke the previously-present current session token when `/signin` or `/signup` succeeds before issuing the replacement cookie. The Authboss event handlers issue the new opaque session directly, so an already-authenticated browser that switches accounts leaves its old current session row valid until logout, expiry, or cleanup.
+- [ ] Replace the current `max=72` password validators with a byte-length check before Authboss/bcrypt runs. Go validator string limits count Unicode code points, so multi-byte passwords can still exceed bcrypt's 72-byte input limit and produce inconsistent signin/signup behavior.
+- [ ] Add a production cookie-safety guard for `auth.cookie_secure=false`. It is useful for local HTTP development, but production HTTPS deployments should fail closed or require an explicit development mode before allowing session cookies without the `Secure` attribute.
+- [ ] Make the CSRF fetch-metadata check compatible with intentionally trusted cross-site frontends. `Sec-Fetch-Site: cross-site` is currently rejected before checking `Origin`, which is safe by default but conflicts with the documented `SameSite=None` split frontend/API workflow; allow only configured trusted origins if cross-site credentialed deployments are supported.
+- [ ] Add regression tests that exercise full signin, signup, logout, protected-request refresh, and account-switching flows through the real Chi middleware chain, including emitted `Set-Cookie` headers and session-table side effects.
 - [ ] Revisit per-request session lookup cost before scaling: protected routes currently validate the cookie by querying Postgres and joining `session -> user -> account`. This is secure and simple, but we may want a cheaper session-only lookup, handler-level user loading, or Redis-backed sessions if auth traffic becomes high or latency-sensitive.
 - [ ] Move schema creation to migrations before production hardening.
 - [ ] Require stable production cookie secrets and add a rotation plan for signed Authboss cookie-state values.
