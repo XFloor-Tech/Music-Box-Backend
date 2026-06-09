@@ -23,6 +23,7 @@ type Server struct {
 	logger       *zap.Logger
 	maxBodyBytes int64
 	validator    *validator.Validate
+	stopAuthJobs func()
 }
 
 func NewServer(logger *zap.Logger) (*Server, error) {
@@ -76,6 +77,8 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		MaxHeaderBytes: maxHeaderBytes,
 	}
 
+	s.stopAuthJobs = auth.StartExpiredSessionCleanup(context.Background(), logger)
+
 	return s, nil
 }
 
@@ -92,6 +95,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.httpSrv.Shutdown(ctx); err != nil {
 		s.logger.Error("HTTP server shutdown error", zap.Error(err))
 		return err
+	}
+
+	if s.stopAuthJobs != nil {
+		s.logger.Info("stopping auth background jobs...")
+		s.stopAuthJobs()
 	}
 
 	if s.db != nil {

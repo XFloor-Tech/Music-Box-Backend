@@ -213,6 +213,7 @@ AUTH_TRUSTED_ORIGINS=https://app.example.com
 AUTH_SESSION_COOKIE_NAME=music_box_session
 AUTH_SESSION_TTL=168h
 AUTH_SESSION_UPDATE_AGE=24h
+AUTH_SESSION_CLEANUP_INTERVAL=5h
 AUTH_COOKIE_SECURE=true
 AUTH_COOKIE_SAME_SITE=lax
 AUTH_COOKIE_SECRET=replace-with-at-least-32-bytes
@@ -308,4 +309,3 @@ export async function apiFetch<T>(
 - Do not call protected routes without `credentials: "include"`.
 - Do not rely only on HTTP status until Authboss failure statuses are fully
   normalized; inspect `success` as well.
-

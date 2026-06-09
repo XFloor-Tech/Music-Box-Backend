@@ -31,6 +31,7 @@ func Load() error {
 	viper.RegisterAlias("auth.session_cookie_name", "AUTH_SESSION_COOKIE_NAME")
 	viper.RegisterAlias("auth.session_ttl", "AUTH_SESSION_TTL")
 	viper.RegisterAlias("auth.session_update_age", "AUTH_SESSION_UPDATE_AGE")
+	viper.RegisterAlias("auth.session_cleanup_interval", "AUTH_SESSION_CLEANUP_INTERVAL")
 	viper.RegisterAlias("auth.trusted_origins", "AUTH_TRUSTED_ORIGINS")
 
 	viper.RegisterAlias("auth.cookie_state_cookie_name", "AUTH_COOKIE_STATE_COOKIE_NAME")
@@ -51,6 +52,7 @@ func Load() error {
 	viper.SetDefault("auth.session_cookie_name", "music_box_session")
 	viper.SetDefault("auth.session_ttl", "168h")
 	viper.SetDefault("auth.session_update_age", "24h")
+	viper.SetDefault("auth.session_cleanup_interval", "5h")
 	viper.SetDefault("auth.trusted_origins", "")
 	viper.SetDefault("auth.cookie_state_cookie_name", "music_box_auth")
 	viper.SetDefault("auth.cookie_state_max_age", "720h")

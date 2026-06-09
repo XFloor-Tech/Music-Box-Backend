@@ -3,6 +3,7 @@ package auth
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -57,6 +58,37 @@ func TestGetConfigDefaultsSessionUpdateAge(t *testing.T) {
 
 	if cfg.SessionUpdateAge != defaultSessionUpdateAge {
 		t.Fatalf("SessionUpdateAge = %v, want %v", cfg.SessionUpdateAge, defaultSessionUpdateAge)
+	}
+}
+
+func TestGetConfigDefaultsSessionCleanupInterval(t *testing.T) {
+	resetViper(t)
+
+	viper.Set("auth.cookie_secret", validTestSecret())
+
+	cfg, err := GetConfig()
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+
+	if cfg.SessionCleanupInterval != defaultSessionCleanupInterval {
+		t.Fatalf("SessionCleanupInterval = %v, want %v", cfg.SessionCleanupInterval, defaultSessionCleanupInterval)
+	}
+}
+
+func TestGetConfigReadsSessionCleanupInterval(t *testing.T) {
+	resetViper(t)
+
+	viper.Set("auth.cookie_secret", validTestSecret())
+	viper.Set("auth.session_cleanup_interval", "2h")
+
+	cfg, err := GetConfig()
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+
+	if cfg.SessionCleanupInterval != 2*time.Hour {
+		t.Fatalf("SessionCleanupInterval = %v, want 2h", cfg.SessionCleanupInterval)
 	}
 }
 

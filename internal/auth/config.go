@@ -13,28 +13,30 @@ import (
 )
 
 const (
-	defaultMountPath             = "/auth"
-	defaultSessionCookieName     = "music_box_session"
-	defaultCookieStateCookieName = "music_box_auth"
-	defaultCookieStateMaxAge     = 30 * 24 * time.Hour
-	defaultCookieSecure          = true
-	defaultSessionTTL            = 7 * 24 * time.Hour
-	defaultSessionUpdateAge      = 24 * time.Hour
-	minSecretBytes               = 32
+	defaultMountPath              = "/auth"
+	defaultSessionCookieName      = "music_box_session"
+	defaultCookieStateCookieName  = "music_box_auth"
+	defaultCookieStateMaxAge      = 30 * 24 * time.Hour
+	defaultCookieSecure           = true
+	defaultSessionTTL             = 7 * 24 * time.Hour
+	defaultSessionUpdateAge       = 24 * time.Hour
+	defaultSessionCleanupInterval = 5 * time.Hour
+	minSecretBytes                = 32
 )
 
 type Config struct {
-	MountPath             string
-	RootURL               string
-	SessionCookieName     string
-	CookieStateCookieName string
-	CookieSecret          []byte
-	CookieSecure          bool
-	CookieSameSite        http.SameSite
-	CookieStateMaxAge     int
-	SessionTTL            time.Duration
-	SessionUpdateAge      time.Duration
-	TrustedOrigins        []string
+	MountPath              string
+	RootURL                string
+	SessionCookieName      string
+	CookieStateCookieName  string
+	CookieSecret           []byte
+	CookieSecure           bool
+	CookieSameSite         http.SameSite
+	CookieStateMaxAge      int
+	SessionTTL             time.Duration
+	SessionUpdateAge       time.Duration
+	SessionCleanupInterval time.Duration
+	TrustedOrigins         []string
 }
 
 func GetConfig() (Config, error) {
@@ -61,6 +63,11 @@ func GetConfig() (Config, error) {
 		return Config{}, fmt.Errorf("auth.session_update_age must be less than auth.session_ttl")
 	}
 
+	sessionCleanupInterval := viper.GetDuration("auth.session_cleanup_interval")
+	if sessionCleanupInterval <= 0 {
+		sessionCleanupInterval = defaultSessionCleanupInterval
+	}
+
 	sameSite, err := sameSiteFromString(viper.GetString("auth.cookie_same_site"))
 	if err != nil {
 		return Config{}, err
@@ -81,17 +88,18 @@ func GetConfig() (Config, error) {
 	}
 
 	cfg := Config{
-		MountPath:             valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
-		RootURL:               rootURL,
-		SessionCookieName:     valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
-		CookieStateCookieName: valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
-		CookieSecret:          cookieSecret,
-		CookieSecure:          cookieSecure,
-		CookieSameSite:        sameSite,
-		CookieStateMaxAge:     int(cookieStateMaxAge.Seconds()),
-		SessionTTL:            sessionTTL,
-		SessionUpdateAge:      sessionUpdateAge,
-		TrustedOrigins:        trustedOrigins,
+		MountPath:              valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
+		RootURL:                rootURL,
+		SessionCookieName:      valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
+		CookieStateCookieName:  valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
+		CookieSecret:           cookieSecret,
+		CookieSecure:           cookieSecure,
+		CookieSameSite:         sameSite,
+		CookieStateMaxAge:      int(cookieStateMaxAge.Seconds()),
+		SessionTTL:             sessionTTL,
+		SessionUpdateAge:       sessionUpdateAge,
+		SessionCleanupInterval: sessionCleanupInterval,
+		TrustedOrigins:         trustedOrigins,
 	}
 
 	if cfg.SessionCookieName == cfg.CookieStateCookieName {
