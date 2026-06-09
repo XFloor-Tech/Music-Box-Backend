@@ -17,17 +17,6 @@ func TestGetConfigRejectsWeakCookieSecret(t *testing.T) {
 	}
 }
 
-func TestGetConfigRejectsWeakJWTSecret(t *testing.T) {
-	resetViper(t)
-
-	viper.Set("auth.cookie_secret", validTestSecret())
-	viper.Set("auth.jwt_secret", "short")
-
-	if _, err := GetConfig(); err == nil {
-		t.Fatal("GetConfig() error = nil, want weak JWT secret error")
-	}
-}
-
 func TestGetConfigRejectsSameSiteNoneWithoutSecureCookie(t *testing.T) {
 	resetViper(t)
 
@@ -37,6 +26,22 @@ func TestGetConfigRejectsSameSiteNoneWithoutSecureCookie(t *testing.T) {
 
 	if _, err := GetConfig(); err == nil {
 		t.Fatal("GetConfig() error = nil, want SameSite=None secure cookie error")
+	}
+}
+
+func TestGetConfigIncludesRootURLAsTrustedOrigin(t *testing.T) {
+	resetViper(t)
+
+	viper.Set("auth.cookie_secret", validTestSecret())
+	viper.Set("auth.root_url", "https://api.example.com/auth")
+
+	cfg, err := GetConfig()
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+
+	if len(cfg.TrustedOrigins) != 1 || cfg.TrustedOrigins[0] != "https://api.example.com" {
+		t.Fatalf("TrustedOrigins = %v, want [https://api.example.com]", cfg.TrustedOrigins)
 	}
 }
 

@@ -343,8 +343,21 @@ WHERE "userId" = $1 AND token = $2
 	return err
 }
 
+func (s *PostgresStorer) DeleteSessionByToken(ctx context.Context, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil
+	}
+
+	_, err := s.repo.Exec(ctx, `
+DELETE FROM "session"
+WHERE token = $1
+`, token)
+	return err
+}
+
 func (s *PostgresStorer) AddRememberToken(ctx context.Context, pid, token string) error {
-	return s.AddRememberTokenWithTTL(ctx, pid, token, defaultRefreshTokenTTL)
+	return s.AddRememberTokenWithTTL(ctx, pid, token, defaultSessionTTL)
 }
 
 func (s *PostgresStorer) AddRememberTokenWithTTL(ctx context.Context, pid, token string, ttl time.Duration) error {
@@ -353,7 +366,7 @@ func (s *PostgresStorer) AddRememberTokenWithTTL(ctx context.Context, pid, token
 		return err
 	}
 	if ttl <= 0 {
-		ttl = defaultRefreshTokenTTL
+		ttl = defaultSessionTTL
 	}
 
 	return s.CreateSession(ctx, Session{
@@ -399,18 +412,27 @@ WHERE "userId" = $1 AND token = $2 AND "expiresAt" > NOW()
 	return nil
 }
 
-func (s *PostgresStorer) UseRefreshToken(ctx context.Context, token string) (*User, error) {
+func (s *PostgresStorer) LoadUserBySessionToken(ctx context.Context, token string) (*User, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, authboss.ErrTokenNotFound
 	}
 
-	var userID string
+	user := &User{}
 	err := s.repo.QueryRow(ctx, `
-DELETE FROM "session"
-WHERE token = $1 AND "expiresAt" > NOW()
-RETURNING "userId"
-`, token).Scan(&userID)
+SELECT u.id, u.email, u.name, u."emailVerified", COALESCE(u.image, ''), a.password
+FROM "session" s
+JOIN "user" u ON u.id = s."userId"
+JOIN "account" a ON a."userId" = u.id AND a."providerId" = $2
+WHERE s.token = $1 AND s."expiresAt" > NOW()
+`, token, credentialProviderID).Scan(
+		&user.ID,
+		&user.PID,
+		&user.Name,
+		&user.EmailVerified,
+		&user.Image,
+		&user.Password,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, authboss.ErrTokenNotFound
 	}
@@ -418,7 +440,7 @@ RETURNING "userId"
 		return nil, err
 	}
 
-	return s.LoadByID(ctx, userID)
+	return user, nil
 }
 
 func (s *PostgresStorer) userForSave(ctx context.Context, user authboss.User, email string) (*User, error) {

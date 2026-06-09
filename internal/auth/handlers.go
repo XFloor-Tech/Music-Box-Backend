@@ -27,11 +27,12 @@ type AuthResponse struct {
 }
 
 type AuthResponseData struct {
-	Token            string           `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	TokenType        string           `json:"token_type" example:"Bearer"`
-	ExpiresAt        time.Time        `json:"expires_at"`
-	RefreshExpiresAt time.Time        `json:"refresh_expires_at"`
-	User             AuthUserResponse `json:"user"`
+	Session AuthSessionResponse `json:"session"`
+	User    AuthUserResponse    `json:"user"`
+}
+
+type AuthSessionResponse struct {
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type AuthErrorResponse struct {
@@ -50,7 +51,7 @@ type LogoutResponseData struct{}
 
 // signinDoc godoc
 // @Summary Sign in
-// @Description Authenticates a user with e-mail and password, sets session and refresh-token cookies, and returns a JWT bearer token.
+// @Description Authenticates a user with e-mail and password and sets an HttpOnly database-backed session cookie.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -63,7 +64,7 @@ func signinDoc() {}
 
 // signupDoc godoc
 // @Summary Sign up
-// @Description Registers a user with e-mail and password, sets session and refresh-token cookies, and returns a JWT bearer token.
+// @Description Registers a user with e-mail and password and sets an HttpOnly database-backed session cookie.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -73,20 +74,9 @@ func signinDoc() {}
 // @Router /signup [post]
 func signupDoc() {}
 
-// refreshDoc godoc
-// @Summary Refresh auth token
-// @Description Rotates the refresh-token cookie and returns a new JWT bearer token.
-// @Tags auth
-// @Produce json
-// @Success 200 {object} AuthResponse
-// @Failure 401 {object} AuthErrorResponse
-// @Failure 500 {object} AuthErrorResponse
-// @Router /refresh [post]
-func refreshDoc() {}
-
 // logoutDoc godoc
 // @Summary Log out
-// @Description Clears Authboss session state, revokes the current bearer-token session when one is provided, and clears the refresh-token cookie.
+// @Description Clears the current database-backed session cookie.
 // @Tags auth
 // @Produce json
 // @Success 200 {object} LogoutResponse

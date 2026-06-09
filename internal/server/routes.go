@@ -20,6 +20,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Use(Recovery(s.logger))
 
 	if s.auth != nil {
+		r.Use(s.auth.CSRFProtection)
 		r.Use(s.auth.LoadClientStateMiddleware)
 		s.auth.RegisterRoutes(
 			r,

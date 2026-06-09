@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,31 +13,26 @@ import (
 )
 
 const (
-	defaultMountPath              = "/auth"
-	defaultSessionCookieName      = "music_box_session"
-	defaultCookieStateCookieName  = "music_box_auth"
-	defaultCookieStateMaxAge      = 30 * 24 * time.Hour
-	defaultCookieSecure           = true
-	defaultJWTIssuer              = "music-box-backend"
-	defaultJWTAudience            = "music-box"
-	defaultJWTTTL                 = 15 * time.Minute
-	defaultRefreshTokenCookieName = "music_box_refresh"
-	defaultRefreshTokenTTL        = 30 * 24 * time.Hour
-	minSecretBytes                = 32
+	defaultMountPath             = "/auth"
+	defaultSessionCookieName     = "music_box_session"
+	defaultCookieStateCookieName = "music_box_auth"
+	defaultCookieStateMaxAge     = 30 * 24 * time.Hour
+	defaultCookieSecure          = true
+	defaultSessionTTL            = 7 * 24 * time.Hour
+	minSecretBytes               = 32
 )
 
 type Config struct {
-	MountPath              string
-	RootURL                string
-	SessionCookieName      string
-	CookieStateCookieName  string
-	RefreshTokenCookieName string
-	CookieSecret           []byte
-	CookieSecure           bool
-	CookieSameSite         http.SameSite
-	CookieStateMaxAge      int
-	RefreshTokenTTL        time.Duration
-	JWT                    TokenConfig
+	MountPath             string
+	RootURL               string
+	SessionCookieName     string
+	CookieStateCookieName string
+	CookieSecret          []byte
+	CookieSecure          bool
+	CookieSameSite        http.SameSite
+	CookieStateMaxAge     int
+	SessionTTL            time.Duration
+	TrustedOrigins        []string
 }
 
 func GetConfig() (Config, error) {
@@ -45,28 +41,14 @@ func GetConfig() (Config, error) {
 		return Config{}, err
 	}
 
-	jwtSecret, err := getOptionalSecretFromConfig("auth.jwt_secret")
-	if err != nil {
-		return Config{}, err
-	}
-	jwtKey := cookieSecret
-	if len(jwtSecret) > 0 {
-		jwtKey = jwtSecret
-	}
-
-	jwtTTL := viper.GetDuration("auth.jwt_ttl")
-	if jwtTTL <= 0 {
-		jwtTTL = defaultJWTTTL
-	}
-
 	cookieStateMaxAge := viper.GetDuration("auth.cookie_state_max_age")
 	if cookieStateMaxAge <= 0 {
 		cookieStateMaxAge = defaultCookieStateMaxAge
 	}
 
-	refreshTokenTTL := viper.GetDuration("auth.refresh_token_ttl")
-	if refreshTokenTTL <= 0 {
-		refreshTokenTTL = defaultRefreshTokenTTL
+	sessionTTL := viper.GetDuration("auth.session_ttl")
+	if sessionTTL <= 0 {
+		sessionTTL = defaultSessionTTL
 	}
 
 	sameSite, err := sameSiteFromString(viper.GetString("auth.cookie_same_site"))
@@ -82,30 +64,27 @@ func GetConfig() (Config, error) {
 		return Config{}, fmt.Errorf("auth.cookie_secure must be true when auth.cookie_same_site is none")
 	}
 
+	rootURL := authRootURL()
+	trustedOrigins, err := trustedOriginsFromConfig(rootURL)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		MountPath:              valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
-		RootURL:                authRootURL(),
-		SessionCookieName:      valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
-		CookieStateCookieName:  valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
-		RefreshTokenCookieName: valueOrDefault(viper.GetString("auth.refresh_token_cookie_name"), defaultRefreshTokenCookieName),
-		CookieSecret:           cookieSecret,
-		CookieSecure:           cookieSecure,
-		CookieSameSite:         sameSite,
-		CookieStateMaxAge:      int(cookieStateMaxAge.Seconds()),
-		RefreshTokenTTL:        refreshTokenTTL,
-		JWT: TokenConfig{
-			Secret:   jwtKey,
-			Issuer:   valueOrDefault(viper.GetString("auth.jwt_issuer"), defaultJWTIssuer),
-			Audience: valueOrDefault(viper.GetString("auth.jwt_audience"), defaultJWTAudience),
-			TTL:      jwtTTL,
-		},
+		MountPath:             valueOrDefault(viper.GetString("auth.mount_path"), defaultMountPath),
+		RootURL:               rootURL,
+		SessionCookieName:     valueOrDefault(viper.GetString("auth.session_cookie_name"), defaultSessionCookieName),
+		CookieStateCookieName: valueOrDefault(viper.GetString("auth.cookie_state_cookie_name"), defaultCookieStateCookieName),
+		CookieSecret:          cookieSecret,
+		CookieSecure:          cookieSecure,
+		CookieSameSite:        sameSite,
+		CookieStateMaxAge:     int(cookieStateMaxAge.Seconds()),
+		SessionTTL:            sessionTTL,
+		TrustedOrigins:        trustedOrigins,
 	}
 
 	if cfg.SessionCookieName == cfg.CookieStateCookieName {
 		return Config{}, fmt.Errorf("auth session and cookie state names must be different")
-	}
-	if cfg.RefreshTokenCookieName == cfg.SessionCookieName || cfg.RefreshTokenCookieName == cfg.CookieStateCookieName {
-		return Config{}, fmt.Errorf("auth refresh token cookie name must be different from other auth cookie names")
 	}
 
 	return cfg, nil
@@ -175,6 +154,59 @@ func authRootURL() string {
 	}
 
 	return strings.TrimRight(raw, "/")
+}
+
+func trustedOriginsFromConfig(rootURL string) ([]string, error) {
+	seen := map[string]struct{}{}
+	origins := make([]string, 0, 4)
+
+	add := func(raw string) error {
+		origin, err := normalizeOrigin(raw)
+		if err != nil {
+			return err
+		}
+		if origin == "" {
+			return nil
+		}
+		if _, ok := seen[origin]; ok {
+			return nil
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+		return nil
+	}
+
+	if err := add(rootURL); err != nil {
+		return nil, err
+	}
+
+	for _, raw := range strings.Split(viper.GetString("auth.trusted_origins"), ",") {
+		if err := add(raw); err != nil {
+			return nil, err
+		}
+	}
+
+	return origins, nil
+}
+
+func normalizeOrigin(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid auth trusted origin %q: %w", raw, err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid auth trusted origin %q", raw)
+	}
+
+	return parsed.Scheme + "://" + parsed.Host, nil
 }
 
 func valueOrDefault(value, fallback string) string {

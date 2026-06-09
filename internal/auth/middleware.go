@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -23,30 +22,7 @@ func (m *Module) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		verified, err := m.tokens.VerifyRequest(r)
-		if err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-
-		if err := m.storer.ValidateSession(r.Context(), verified.UserID, verified.TokenID); err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-
-		user, err := m.storer.LoadByID(r.Context(), verified.UserID)
-		if err == authboss.ErrUserNotFound {
-			writeAuthError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-		if err != nil {
-			writeAuthError(w, http.StatusInternalServerError, "failed to load authenticated user")
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), authboss.CTXKeyPID, user.GetPID())
-		ctx = context.WithValue(ctx, authboss.CTXKeyUser, user)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		writeAuthError(w, http.StatusUnauthorized, "authentication required")
 	})
 }
 

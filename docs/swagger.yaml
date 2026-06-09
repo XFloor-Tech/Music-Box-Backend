@@ -1,12 +1,114 @@
 basePath: /
 definitions:
+  auth.AuthErrorResponse:
+    properties:
+      error:
+        example: authentication required
+        type: string
+      status:
+        example: failure
+        type: string
+      success:
+        example: false
+        type: boolean
+    type: object
+  auth.AuthResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.AuthResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.AuthResponseData:
+    properties:
+      session:
+        $ref: '#/definitions/auth.AuthSessionResponse'
+      user:
+        $ref: '#/definitions/auth.AuthUserResponse'
+    type: object
+  auth.AuthSessionResponse:
+    properties:
+      expires_at:
+        type: string
+    type: object
+  auth.AuthUserResponse:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      email_verified:
+        example: false
+        type: boolean
+      id:
+        example: usr_abc123
+        type: string
+      name:
+        example: user
+        type: string
+    type: object
+  auth.LogoutResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.LogoutResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  auth.LogoutResponseData:
+    type: object
+  auth.SigninRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: P@ssw0rd1
+        maxLength: 72
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  auth.SignupRequest:
+    properties:
+      confirm_password:
+        example: P@ssw0rd1
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: P@ssw0rd1
+        maxLength: 72
+        minLength: 8
+        type: string
+    required:
+    - confirm_password
+    - email
+    - password
+    type: object
   server.healthResponse:
+    properties:
+      data:
+        $ref: '#/definitions/server.healthResponseData'
+      status:
+        example: ok
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  server.healthResponseData:
     properties:
       service:
         example: music-player
-        type: string
-      status:
-        example: ok
         type: string
     type: object
 info:
@@ -28,6 +130,81 @@ paths:
       summary: Health check
       tags:
       - health
+  /logout:
+    delete:
+      description: Clears the current database-backed session cookie.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LogoutResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.AuthErrorResponse'
+      summary: Log out
+      tags:
+      - auth
+  /signin:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user with e-mail and password and sets an HttpOnly
+        database-backed session cookie.
+      parameters:
+      - description: Signin payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/auth.SigninRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/auth.AuthErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/auth.AuthErrorResponse'
+      summary: Sign in
+      tags:
+      - auth
+  /signup:
+    post:
+      consumes:
+      - application/json
+      description: Registers a user with e-mail and password and sets an HttpOnly
+        database-backed session cookie.
+      parameters:
+      - description: Signup payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/auth.SignupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/auth.AuthErrorResponse'
+      summary: Sign up
+      tags:
+      - auth
 schemes:
 - http
 swagger: "2.0"

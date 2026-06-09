@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/aarondl/authboss/v3"
 	_ "github.com/aarondl/authboss/v3/auth"
@@ -21,7 +20,6 @@ import (
 const (
 	signinRoute          = "/signin"
 	signupRoute          = "/signup"
-	refreshRoute         = "/refresh"
 	logoutRoute          = "/logout"
 	authbossLoginPath    = "/login"
 	authbossRegisterPath = "/register"
@@ -32,7 +30,6 @@ const (
 type Module struct {
 	ab     *authboss.Authboss
 	storer *PostgresStorer
-	tokens *TokenService
 	config Config
 }
 
@@ -57,13 +54,13 @@ func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, 
 	ab.Config.Paths.NotAuthorized = signinRoute
 
 	ab.Config.Storage.Server = storer
-	ab.Config.Storage.SessionState = NewCookieStateReadWriter(CookieStateConfig{
+	ab.Config.Storage.SessionState = NewDBSessionStateReadWriter(storer, SessionCookieConfig{
 		Name:     cfg.SessionCookieName,
-		Secret:   cfg.CookieSecret,
 		Path:     "/",
 		HTTPOnly: true,
 		Secure:   cfg.CookieSecure,
 		SameSite: cfg.CookieSameSite,
+		TTL:      cfg.SessionTTL,
 	})
 	ab.Config.Storage.CookieState = NewCookieStateReadWriter(CookieStateConfig{
 		Name:     cfg.CookieStateCookieName,
@@ -78,7 +75,6 @@ func Setup(ctx context.Context, repo database.Repository, cfg Config) (*Module, 
 	module := &Module{
 		ab:     ab,
 		storer: storer,
-		tokens: NewTokenService(cfg.JWT),
 		config: cfg,
 	}
 	module.registerEvents()
@@ -113,7 +109,6 @@ func (m *Module) RegisterRoutes(r chi.Router, signinMiddleware, signupMiddleware
 
 	r.With(optionalMiddleware(signinMiddleware)).Post(signinRoute, m.authbossRoute(authbossLoginPath))
 	r.With(optionalMiddleware(signupMiddleware)).Post(signupRoute, m.authbossRoute(authbossRegisterPath))
-	r.Post(refreshRoute, m.refreshToken)
 	r.Delete(logoutRoute, m.authbossRoute(authbossLogoutPath))
 }
 
@@ -157,11 +152,11 @@ func cloneRequestWithPath(r *http.Request, path string) *http.Request {
 
 func (m *Module) registerEvents() {
 	m.ab.Events.Before(authboss.EventAuthHijack, func(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
-		return m.respondWithAuthToken(w, r, handled, http.StatusOK)
+		return m.respondWithAuthSession(w, r, handled, http.StatusOK)
 	})
 
 	m.ab.Events.After(authboss.EventRegister, func(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
-		return m.respondWithAuthToken(w, r, handled, http.StatusCreated)
+		return m.respondWithAuthSession(w, r, handled, http.StatusCreated)
 	})
 
 	m.ab.Events.After(authboss.EventLogout, func(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
@@ -172,13 +167,6 @@ func (m *Module) registerEvents() {
 func (m *Module) respondWithLogout(w http.ResponseWriter, r *http.Request, handled bool) (bool, error) {
 	if handled {
 		return true, nil
-	}
-
-	if err := m.revokeBearerSession(r); err != nil {
-		return false, err
-	}
-	if err := m.revokeRefreshToken(w, r); err != nil {
-		return false, err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -194,25 +182,7 @@ func (m *Module) respondWithLogout(w http.ResponseWriter, r *http.Request, handl
 	return true, nil
 }
 
-func (m *Module) revokeBearerSession(r *http.Request) error {
-	if m == nil || m.tokens == nil || m.storer == nil {
-		return nil
-	}
-
-	token := bearerToken(r.Header.Get("Authorization"))
-	if token == "" {
-		return nil
-	}
-
-	verified, err := m.tokens.Verify(token)
-	if err != nil {
-		return nil
-	}
-
-	return m.storer.DeleteSession(r.Context(), verified.UserID, verified.TokenID)
-}
-
-func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, handled bool, statusCode int) (bool, error) {
+func (m *Module) respondWithAuthSession(w http.ResponseWriter, r *http.Request, handled bool, statusCode int) (bool, error) {
 	if handled {
 		return true, nil
 	}
@@ -223,15 +193,12 @@ func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, ha
 	}
 
 	pid := user.GetPID()
-	authboss.PutSession(w, authboss.SessionKey, pid)
-	authboss.DelSession(w, authboss.SessionHalfAuthKey)
-
 	authUser, err := m.authUser(r.Context(), user)
 	if err != nil {
 		return false, err
 	}
 
-	data, err := m.issueAuthTokens(w, r, authUser, pid)
+	expiresAt, err := m.issueSessionCookie(w, r, authUser)
 	if err != nil {
 		return false, err
 	}
@@ -239,7 +206,17 @@ func (m *Module) respondWithAuthToken(w http.ResponseWriter, r *http.Request, ha
 	response := AuthResponse{
 		Success: true,
 		Status:  "success",
-		Data:    data,
+		Data: AuthResponseData{
+			Session: AuthSessionResponse{
+				ExpiresAt: expiresAt,
+			},
+			User: AuthUserResponse{
+				ID:            authUser.ID,
+				Email:         pid,
+				Name:          authUser.Name,
+				EmailVerified: authUser.EmailVerified,
+			},
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -257,13 +234,4 @@ func (m *Module) authUser(ctx context.Context, user authboss.User) (*User, error
 	}
 
 	return m.storer.loadAuthUser(ctx, user.GetPID())
-}
-
-func bearerToken(header string) string {
-	scheme, token, ok := strings.Cut(strings.TrimSpace(header), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-
-	return strings.TrimSpace(token)
 }
