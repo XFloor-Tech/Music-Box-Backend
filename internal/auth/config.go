@@ -19,6 +19,7 @@ const (
 	defaultCookieStateMaxAge     = 30 * 24 * time.Hour
 	defaultCookieSecure          = true
 	defaultSessionTTL            = 7 * 24 * time.Hour
+	defaultSessionUpdateAge      = 24 * time.Hour
 	minSecretBytes               = 32
 )
 
@@ -32,6 +33,7 @@ type Config struct {
 	CookieSameSite        http.SameSite
 	CookieStateMaxAge     int
 	SessionTTL            time.Duration
+	SessionUpdateAge      time.Duration
 	TrustedOrigins        []string
 }
 
@@ -49,6 +51,14 @@ func GetConfig() (Config, error) {
 	sessionTTL := viper.GetDuration("auth.session_ttl")
 	if sessionTTL <= 0 {
 		sessionTTL = defaultSessionTTL
+	}
+
+	sessionUpdateAge := viper.GetDuration("auth.session_update_age")
+	if sessionUpdateAge <= 0 {
+		sessionUpdateAge = defaultSessionUpdateAge
+	}
+	if sessionUpdateAge >= sessionTTL {
+		return Config{}, fmt.Errorf("auth.session_update_age must be less than auth.session_ttl")
 	}
 
 	sameSite, err := sameSiteFromString(viper.GetString("auth.cookie_same_site"))
@@ -80,6 +90,7 @@ func GetConfig() (Config, error) {
 		CookieSameSite:        sameSite,
 		CookieStateMaxAge:     int(cookieStateMaxAge.Seconds()),
 		SessionTTL:            sessionTTL,
+		SessionUpdateAge:      sessionUpdateAge,
 		TrustedOrigins:        trustedOrigins,
 	}
 

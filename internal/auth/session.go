@@ -66,7 +66,7 @@ func (rw *DBSessionStateReadWriter) ReadState(r *http.Request) (authboss.ClientS
 		return state, nil
 	}
 
-	user, err := rw.storer.LoadUserBySessionToken(r.Context(), tokenHash)
+	user, session, err := rw.storer.LoadUserBySessionToken(r.Context(), tokenHash)
 	if errors.Is(err, authboss.ErrTokenNotFound) || errors.Is(err, authboss.ErrUserNotFound) {
 		return state, nil
 	}
@@ -74,7 +74,14 @@ func (rw *DBSessionStateReadWriter) ReadState(r *http.Request) (authboss.ClientS
 		return nil, err
 	}
 
+	if session == nil {
+		return state, nil
+	}
+
+	state.token = cookie.Value
 	state.tokenHash = tokenHash
+	state.expiresAt = session.ExpiresAt
+	state.updatedAt = session.UpdatedAt
 	state.values[authboss.SessionKey] = user.GetPID()
 	return state, nil
 }
@@ -144,12 +151,38 @@ type dbSessionState struct {
 	values    clientState
 	ctx       context.Context
 	request   *http.Request
+	token     string
 	tokenHash string
+	expiresAt time.Time
+	updatedAt time.Time
 }
 
 func (s dbSessionState) Get(key string) (string, bool) {
 	value, ok := s.values[key]
 	return value, ok
+}
+
+func (s dbSessionState) needsRefresh(now time.Time, updateAge time.Duration) bool {
+	if strings.TrimSpace(s.token) == "" || strings.TrimSpace(s.tokenHash) == "" || s.updatedAt.IsZero() {
+		return false
+	}
+	if updateAge <= 0 {
+		updateAge = defaultSessionUpdateAge
+	}
+	if !s.expiresAt.IsZero() && !s.expiresAt.After(now) {
+		return false
+	}
+
+	return !s.updatedAt.After(now.Add(-updateAge))
+}
+
+func dbSessionStateFromRequest(r *http.Request) (dbSessionState, bool) {
+	if r == nil {
+		return dbSessionState{}, false
+	}
+
+	sessionState, ok := r.Context().Value(authboss.CTXKeySessionState).(dbSessionState)
+	return sessionState, ok
 }
 
 func dbSessionStateFromClientState(state authboss.ClientState) dbSessionState {
@@ -175,14 +208,53 @@ func (m *Module) issueSessionCookie(w http.ResponseWriter, r *http.Request, auth
 	if m == nil || m.storer == nil {
 		return time.Time{}, fmt.Errorf("authentication is not configured")
 	}
-	return issueSessionCookieWithConfig(w, r, m.storer, SessionCookieConfig{
+
+	return issueSessionCookieWithConfig(w, r, m.storer, m.sessionCookieConfig(), authUser)
+}
+
+func (m *Module) sessionCookieConfig() SessionCookieConfig {
+	return SessionCookieConfig{
 		Name:     m.config.SessionCookieName,
 		Path:     "/",
 		HTTPOnly: true,
 		Secure:   m.config.CookieSecure,
 		SameSite: m.config.CookieSameSite,
 		TTL:      m.config.SessionTTL,
-	}, authUser)
+	}
+}
+
+func (m *Module) refreshSessionIfNeeded(w http.ResponseWriter, r *http.Request) error {
+	if m == nil || m.storer == nil {
+		return nil
+	}
+
+	sessionState, ok := dbSessionStateFromRequest(r)
+	if !ok {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	if !sessionState.needsRefresh(now, m.config.SessionUpdateAge) {
+		return nil
+	}
+
+	cfg := m.sessionCookieConfig()
+	ttl := cfg.TTL
+	if ttl <= 0 {
+		ttl = defaultSessionTTL
+	}
+
+	expiresAt := now.Add(ttl)
+	refreshed, err := m.storer.UpdateSessionExpiry(r.Context(), sessionState.tokenHash, expiresAt)
+	if err != nil {
+		return err
+	}
+	if !refreshed {
+		return nil
+	}
+
+	http.SetCookie(w, (&DBSessionStateReadWriter{config: cfg}).cookie(sessionState.token, int(ttl.Seconds())))
+	return nil
 }
 
 func issueSessionCookieWithConfig(w http.ResponseWriter, r *http.Request, storer *PostgresStorer, cfg SessionCookieConfig, authUser *User) (time.Time, error) {

@@ -30,6 +30,7 @@ func Load() error {
 	viper.RegisterAlias("auth.root_url", "AUTH_ROOT_URL")
 	viper.RegisterAlias("auth.session_cookie_name", "AUTH_SESSION_COOKIE_NAME")
 	viper.RegisterAlias("auth.session_ttl", "AUTH_SESSION_TTL")
+	viper.RegisterAlias("auth.session_update_age", "AUTH_SESSION_UPDATE_AGE")
 	viper.RegisterAlias("auth.trusted_origins", "AUTH_TRUSTED_ORIGINS")
 
 	viper.RegisterAlias("auth.cookie_state_cookie_name", "AUTH_COOKIE_STATE_COOKIE_NAME")
@@ -44,10 +45,12 @@ func Load() error {
 	viper.SetDefault("server.max_header_bytes", 1024*1024)
 	viper.SetDefault("database.addr", "")
 	viper.SetDefault("database.max_connections", 10)
+
 	viper.SetDefault("auth.mount_path", "/auth")
 	viper.SetDefault("auth.root_url", "")
 	viper.SetDefault("auth.session_cookie_name", "music_box_session")
 	viper.SetDefault("auth.session_ttl", "168h")
+	viper.SetDefault("auth.session_update_age", "24h")
 	viper.SetDefault("auth.trusted_origins", "")
 	viper.SetDefault("auth.cookie_state_cookie_name", "music_box_auth")
 	viper.SetDefault("auth.cookie_state_max_age", "720h")

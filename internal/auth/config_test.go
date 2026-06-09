@@ -45,6 +45,33 @@ func TestGetConfigIncludesRootURLAsTrustedOrigin(t *testing.T) {
 	}
 }
 
+func TestGetConfigDefaultsSessionUpdateAge(t *testing.T) {
+	resetViper(t)
+
+	viper.Set("auth.cookie_secret", validTestSecret())
+
+	cfg, err := GetConfig()
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+
+	if cfg.SessionUpdateAge != defaultSessionUpdateAge {
+		t.Fatalf("SessionUpdateAge = %v, want %v", cfg.SessionUpdateAge, defaultSessionUpdateAge)
+	}
+}
+
+func TestGetConfigRejectsSessionUpdateAgeAtLeastSessionTTL(t *testing.T) {
+	resetViper(t)
+
+	viper.Set("auth.cookie_secret", validTestSecret())
+	viper.Set("auth.session_ttl", "24h")
+	viper.Set("auth.session_update_age", "24h")
+
+	if _, err := GetConfig(); err == nil {
+		t.Fatal("GetConfig() error = nil, want invalid session update age error")
+	}
+}
+
 func resetViper(t *testing.T) {
 	t.Helper()
 	viper.Reset()

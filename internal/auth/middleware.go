@@ -15,6 +15,11 @@ func (m *Module) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req := r
 		if _, err := m.ab.LoadCurrentUser(&req); err == nil {
+			if err := m.refreshSessionIfNeeded(w, req); err != nil {
+				writeAuthError(w, http.StatusInternalServerError, "failed to refresh authenticated session")
+				return
+			}
+
 			next.ServeHTTP(w, req)
 			return
 		} else if err != authboss.ErrUserNotFound {

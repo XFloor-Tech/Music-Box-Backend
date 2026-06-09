@@ -118,6 +118,8 @@ type Session struct {
 	ExpiresAt time.Time
 	IPAddress string
 	UserAgent string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type PostgresStorer struct {
@@ -356,6 +358,25 @@ WHERE token = $1
 	return err
 }
 
+func (s *PostgresStorer) UpdateSessionExpiry(ctx context.Context, token string, expiresAt time.Time) (bool, error) {
+	token = strings.TrimSpace(token)
+	if token == "" || expiresAt.IsZero() {
+		return false, nil
+	}
+
+	tag, err := s.repo.Exec(ctx, `
+UPDATE "session"
+SET "expiresAt" = $2,
+	"updatedAt" = NOW()
+WHERE token = $1 AND "expiresAt" > NOW()
+`, token, expiresAt)
+	if err != nil {
+		return false, err
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
 func (s *PostgresStorer) AddRememberToken(ctx context.Context, pid, token string) error {
 	return s.AddRememberTokenWithTTL(ctx, pid, token, defaultSessionTTL)
 }
@@ -412,15 +433,17 @@ WHERE "userId" = $1 AND token = $2 AND "expiresAt" > NOW()
 	return nil
 }
 
-func (s *PostgresStorer) LoadUserBySessionToken(ctx context.Context, token string) (*User, error) {
+func (s *PostgresStorer) LoadUserBySessionToken(ctx context.Context, token string) (*User, *Session, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return nil, authboss.ErrTokenNotFound
+		return nil, nil, authboss.ErrTokenNotFound
 	}
 
 	user := &User{}
+	session := &Session{}
 	err := s.repo.QueryRow(ctx, `
-SELECT u.id, u.email, u.name, u."emailVerified", COALESCE(u.image, ''), a.password
+SELECT u.id, u.email, u.name, u."emailVerified", COALESCE(u.image, ''), a.password,
+	s.id, s."userId", s.token, s."expiresAt", COALESCE(s."ipAddress", ''), COALESCE(s."userAgent", ''), s."createdAt", s."updatedAt"
 FROM "session" s
 JOIN "user" u ON u.id = s."userId"
 JOIN "account" a ON a."userId" = u.id AND a."providerId" = $2
@@ -432,15 +455,23 @@ WHERE s.token = $1 AND s."expiresAt" > NOW()
 		&user.EmailVerified,
 		&user.Image,
 		&user.Password,
+		&session.ID,
+		&session.UserID,
+		&session.Token,
+		&session.ExpiresAt,
+		&session.IPAddress,
+		&session.UserAgent,
+		&session.CreatedAt,
+		&session.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, authboss.ErrTokenNotFound
+		return nil, nil, authboss.ErrTokenNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return user, nil
+	return user, session, nil
 }
 
 func (s *PostgresStorer) userForSave(ctx context.Context, user authboss.User, email string) (*User, error) {
