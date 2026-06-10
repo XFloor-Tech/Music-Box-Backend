@@ -20,8 +20,18 @@ type Profile struct {
 	Image         string
 }
 
+type UpdateProfileInput struct {
+	Name  *string
+	Image *string
+}
+
+func (input UpdateProfileInput) Empty() bool {
+	return input.Name == nil && input.Image == nil
+}
+
 type Repository interface {
 	LoadProfileByID(ctx context.Context, id string) (Profile, error)
+	UpdateProfileByID(ctx context.Context, id string, input UpdateProfileInput) (Profile, error)
 }
 
 type PostgresRepository struct {
@@ -61,4 +71,46 @@ WHERE id = $1
 	}
 
 	return profile, nil
+}
+
+func (r *PostgresRepository) UpdateProfileByID(ctx context.Context, id string, input UpdateProfileInput) (Profile, error) {
+	id = strings.TrimSpace(id)
+
+	if id == "" || input.Empty() {
+		return Profile{}, ErrUserNotFound
+	}
+
+	var profile Profile
+	err := r.repo.QueryRow(ctx, `
+UPDATE "user"
+SET name = COALESCE($2, name),
+	image = COALESCE($3, image),
+	"updatedAt" = NOW()
+WHERE id = $1
+RETURNING id, email, name, "emailVerified", COALESCE(image, '')
+`, id, optionalStringArg(input.Name), optionalStringArg(input.Image)).Scan(
+		&profile.ID,
+		&profile.Email,
+		&profile.Name,
+		&profile.EmailVerified,
+		&profile.Image,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Profile{}, ErrUserNotFound
+	}
+
+	if err != nil {
+		return Profile{}, err
+	}
+
+	return profile, nil
+}
+
+func optionalStringArg(value *string) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
 }

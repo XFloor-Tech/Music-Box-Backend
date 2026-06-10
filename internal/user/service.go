@@ -55,3 +55,33 @@ func (s *Service) Me(w http.ResponseWriter, r *http.Request) (Profile, error) {
 
 	return profile, nil
 }
+
+func (s *Service) UpdateMe(w http.ResponseWriter, r *http.Request, input UpdateProfileInput) (Profile, error) {
+	if s == nil || s.repo == nil || s.auth == nil {
+		return Profile{}, fmt.Errorf("user service is not configured")
+	}
+	if input.Empty() {
+		return Profile{}, fmt.Errorf("user update input is required")
+	}
+
+	authUser, req, err := s.auth.LoadAuthenticatedUser(w, r)
+	if errors.Is(err, authboss.ErrUserNotFound) {
+		return Profile{}, ErrNotAuthenticated
+	}
+	if err != nil {
+		return Profile{}, fmt.Errorf("load authenticated user: %w", err)
+	}
+	if authUser == nil || strings.TrimSpace(authUser.ID) == "" {
+		return Profile{}, fmt.Errorf("authenticated user id is required")
+	}
+	if req == nil {
+		req = r
+	}
+
+	profile, err := s.repo.UpdateProfileByID(req.Context(), authUser.ID, input)
+	if err != nil {
+		return Profile{}, fmt.Errorf("update user profile: %w", err)
+	}
+
+	return profile, nil
+}

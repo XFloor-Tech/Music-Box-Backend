@@ -91,6 +91,56 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "patch": {
+                "description": "Updates provided profile fields for the authenticated user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Update current user",
+                "parameters": [
+                    {
+                        "description": "Profile update payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/user.UpdateMeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/user.MeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/user.UserErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/user.UserErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/user.UserErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/signin": {
@@ -361,6 +411,19 @@ const docTemplate = `{
             "properties": {
                 "user": {
                     "$ref": "#/definitions/user.UserResponse"
+                }
+            }
+        },
+        "user.UpdateMeRequest": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "type": "string",
+                    "example": "https://example.com/avatar.png"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "New display name"
                 }
             }
         },

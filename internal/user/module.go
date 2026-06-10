@@ -31,4 +31,5 @@ func (m *Module) RegisterRoutes(r chi.Router) {
 	}
 
 	r.Get("/me", m.handleMe)
+	r.Patch("/me", m.handleUpdateMe)
 }
