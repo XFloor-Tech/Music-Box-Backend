@@ -111,6 +111,61 @@ definitions:
         example: music-player
         type: string
     type: object
+  user.MeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/user.MeResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  user.MeResponseData:
+    properties:
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  user.UpdateMeRequest:
+    properties:
+      image:
+        example: https://example.com/avatar.png
+        type: string
+      name:
+        example: New display name
+        type: string
+    type: object
+  user.UserErrorResponse:
+    properties:
+      error:
+        example: authentication required
+        type: string
+      status:
+        example: failure
+        type: string
+      success:
+        example: false
+        type: boolean
+    type: object
+  user.UserResponse:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      email_verified:
+        example: false
+        type: boolean
+      id:
+        example: usr_abc123
+        type: string
+      image:
+        example: https://example.com/avatar.png
+        type: string
+      name:
+        example: user
+        type: string
+    type: object
 info:
   contact: {}
   description: Backend service for the Music Box project.
@@ -147,6 +202,60 @@ paths:
       summary: Log out
       tags:
       - auth
+  /me:
+    get:
+      description: Returns the authenticated user's profile.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.UserErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/user.UserErrorResponse'
+      summary: Current user
+      tags:
+      - user
+    patch:
+      consumes:
+      - application/json
+      description: Updates provided profile fields for the authenticated user.
+      parameters:
+      - description: Profile update payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/user.UpdateMeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.MeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/user.UserErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.UserErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/user.UserErrorResponse'
+      summary: Update current user
+      tags:
+      - user
   /signin:
     post:
       consumes:

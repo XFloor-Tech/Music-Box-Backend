@@ -13,13 +13,8 @@ func (m *Module) RequireAuth(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := r
-		if _, err := m.ab.LoadCurrentUser(&req); err == nil {
-			if err := m.refreshSessionIfNeeded(w, req); err != nil {
-				writeAuthError(w, http.StatusInternalServerError, "failed to refresh authenticated session")
-				return
-			}
-
+		_, req, err := m.LoadAuthenticatedUser(w, r)
+		if err == nil {
 			next.ServeHTTP(w, req)
 			return
 		} else if err != authboss.ErrUserNotFound {
@@ -39,4 +34,29 @@ func writeAuthError(w http.ResponseWriter, statusCode int, message string) {
 		Status:  "failure",
 		Error:   message,
 	})
+}
+
+func (m *Module) LoadAuthenticatedUser(w http.ResponseWriter, r *http.Request) (*User, *http.Request, error) {
+	if m == nil || m.ab == nil || r == nil {
+		return nil, r, authboss.ErrUserNotFound
+	}
+
+	req := r
+	user, err := m.ab.LoadCurrentUser(&req)
+	if err != nil {
+		return nil, req, err
+	}
+
+	if w != nil {
+		if err := m.refreshSessionIfNeeded(w, req); err != nil {
+			return nil, req, err
+		}
+	}
+
+	authUser, err := m.authUser(req.Context(), user)
+	if err != nil {
+		return nil, req, err
+	}
+
+	return authUser, req, nil
 }
