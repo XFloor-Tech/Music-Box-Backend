@@ -30,6 +30,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		)
 	}
 
+	if s.user != nil {
+		s.user.RegisterRoutes(r)
+	}
+
 	r.Get("/health", s.healthCheck)
 
 	s.registerSwaggerRoutes(r)

@@ -6,20 +6,20 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aarondl/authboss/v3"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	authmodule "xfloor/music-box-backend/internal/auth"
 	"xfloor/music-box-backend/internal/database"
+	usermodule "xfloor/music-box-backend/internal/user"
 )
 
 type Server struct {
 	httpSrv      *http.Server
 	db           database.Service
-	ab           *authboss.Authboss
 	auth         *authmodule.Module
+	user         *usermodule.Module
 	logger       *zap.Logger
 	maxBodyBytes int64
 	validator    *validator.Validate
@@ -60,11 +60,16 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		return nil, fmt.Errorf("initialize auth: %w", err)
 	}
 
+	users, err := usermodule.Setup(db, auth)
+	if err != nil {
+		return nil, fmt.Errorf("initialize user module: %w", err)
+	}
+
 	s := &Server{
 		logger:       logger,
 		db:           db,
-		ab:           auth.Authboss(),
 		auth:         auth,
+		user:         users,
 		maxBodyBytes: maxBodyBytes,
 		validator:    NewRequestValidator(),
 	}
