@@ -81,7 +81,7 @@ type TrackErrorResponse struct {
 // @Param visibility query string false "Track visibility filter." Enums(private, unlisted, public)
 // @Success 200 {object} TracksResponse
 // @Failure 400 {object} TrackErrorResponse
-// @Failure 403 {object} TrackErrorResponse
+// @Failure 401 {object} TrackErrorResponse
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks [get]
 func tracksDoc() {}
@@ -94,7 +94,7 @@ func tracksDoc() {}
 // @Param trackID path string true "Track ID"
 // @Success 200 {object} TrackDetailResponse
 // @Failure 400 {object} TrackErrorResponse
-// @Failure 403 {object} TrackErrorResponse
+// @Failure 401 {object} TrackErrorResponse
 // @Failure 404 {object} TrackErrorResponse
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks/{trackID} [get]
@@ -110,7 +110,7 @@ func trackDoc() {}
 // @Param payload body UpdateTrackRequest true "Track update payload"
 // @Success 200 {object} TrackDetailResponse
 // @Failure 400 {object} TrackErrorResponse
-// @Failure 403 {object} TrackErrorResponse
+// @Failure 401 {object} TrackErrorResponse
 // @Failure 404 {object} TrackErrorResponse
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks/{trackID} [patch]
@@ -124,7 +124,7 @@ func updateTrackDoc() {}
 // @Param trackID path string true "Track ID"
 // @Success 200 {object} TrackDetailResponse
 // @Failure 400 {object} TrackErrorResponse
-// @Failure 403 {object} TrackErrorResponse
+// @Failure 401 {object} TrackErrorResponse
 // @Failure 404 {object} TrackErrorResponse
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks/{trackID} [delete]
@@ -139,7 +139,7 @@ func deleteTrackDoc() {}
 // @Param payload body BatchDeleteTracksRequest true "Batch delete payload"
 // @Success 200 {object} BatchDeleteTracksResponse
 // @Failure 400 {object} TrackErrorResponse
-// @Failure 403 {object} TrackErrorResponse
+// @Failure 401 {object} TrackErrorResponse
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks/batch-delete [post]
 func batchDeleteTracksDoc() {}
@@ -148,7 +148,7 @@ func (m *Module) handleListTracks(w http.ResponseWriter, r *http.Request) {
 	page, err := m.service.ListTracks(w, r)
 	if err != nil {
 		if errors.Is(err, ErrNotAuthenticated) {
-			writeTrackError(w, http.StatusForbidden, "authentication required")
+			writeTrackError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		var requestErr *requestError
@@ -186,7 +186,7 @@ func (m *Module) handleGetTrack(w http.ResponseWriter, r *http.Request) {
 	track, err := m.service.GetTrack(w, r, chi.URLParam(r, "trackID"))
 	if err != nil {
 		if errors.Is(err, ErrNotAuthenticated) {
-			writeTrackError(w, http.StatusForbidden, "authentication required")
+			writeTrackError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		if errors.Is(err, ErrTrackNotFound) {
@@ -224,7 +224,7 @@ func (m *Module) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
 	track, err := m.service.UpdateTrack(w, r, chi.URLParam(r, "trackID"), input)
 	if err != nil {
 		if errors.Is(err, ErrNotAuthenticated) {
-			writeTrackError(w, http.StatusForbidden, "authentication required")
+			writeTrackError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		if errors.Is(err, ErrTrackNotFound) {
@@ -256,7 +256,7 @@ func (m *Module) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 	track, err := m.service.DeleteTrack(w, r, chi.URLParam(r, "trackID"))
 	if err != nil {
 		if errors.Is(err, ErrNotAuthenticated) {
-			writeTrackError(w, http.StatusForbidden, "authentication required")
+			writeTrackError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		if errors.Is(err, ErrTrackNotFound) {
@@ -294,7 +294,7 @@ func (m *Module) handleBatchDeleteTracks(w http.ResponseWriter, r *http.Request)
 	results, err := m.service.BatchDeleteTracks(w, r, input)
 	if err != nil {
 		if errors.Is(err, ErrNotAuthenticated) {
-			writeTrackError(w, http.StatusForbidden, "authentication required")
+			writeTrackError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 

@@ -354,7 +354,7 @@ func TestTrackListCursorUsesCamelCaseAndAcceptsLegacySnakeCase(t *testing.T) {
 	}
 }
 
-func TestHandleListTracksReturnsForbiddenWhenUnauthenticated(t *testing.T) {
+func TestHandleListTracksReturnsUnauthorizedWhenUnauthenticated(t *testing.T) {
 	repo := &stubTrackRepository{}
 	module := &Module{
 		service: NewService(repo, stubAuthenticator{
@@ -367,8 +367,8 @@ func TestHandleListTracksReturnsForbiddenWhenUnauthenticated(t *testing.T) {
 
 	module.handleListTracks(recorder, req)
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
 	}
 	if len(repo.listedUserIDs) != 0 {
 		t.Fatalf("listed user ids = %#v, want none", repo.listedUserIDs)
@@ -503,7 +503,7 @@ func TestHandleGetTrackReturnsAuthenticatedUserTrack(t *testing.T) {
 	}
 }
 
-func TestHandleGetTrackReturnsForbiddenWhenUnauthenticated(t *testing.T) {
+func TestHandleGetTrackReturnsUnauthorizedWhenUnauthenticated(t *testing.T) {
 	repo := &stubTrackRepository{}
 	module := &Module{
 		service: NewService(repo, stubAuthenticator{
@@ -518,8 +518,8 @@ func TestHandleGetTrackReturnsForbiddenWhenUnauthenticated(t *testing.T) {
 
 	router.ServeHTTP(recorder, req)
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
 	}
 	if len(repo.gotTrackIDs) != 0 {
 		t.Fatalf("got track ids = %#v, want none", repo.gotTrackIDs)

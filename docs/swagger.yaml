@@ -570,8 +570,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
-        "403":
-          description: Forbidden
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
         "500":
@@ -601,8 +601,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
-        "403":
-          description: Forbidden
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
         "404":
@@ -635,8 +635,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
-        "403":
-          description: Forbidden
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
         "404":
@@ -678,8 +678,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
-        "403":
-          description: Forbidden
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
         "404":
@@ -717,8 +717,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
-        "403":
-          description: Forbidden
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
         "500":

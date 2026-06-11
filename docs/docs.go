@@ -292,8 +292,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
@@ -344,8 +344,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
@@ -391,8 +391,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
@@ -442,8 +442,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
@@ -505,8 +505,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/track.TrackErrorResponse"
                         }
