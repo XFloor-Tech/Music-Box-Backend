@@ -35,7 +35,7 @@ type UserResponse struct {
 	ID            string `json:"id" example:"usr_abc123"`
 	Email         string `json:"email" example:"user@example.com"`
 	Name          string `json:"name" example:"user"`
-	EmailVerified bool   `json:"email_verified" example:"false"`
+	EmailVerified bool   `json:"emailVerified" example:"false"`
 	Image         string `json:"image" example:"https://example.com/avatar.png"`
 }
 

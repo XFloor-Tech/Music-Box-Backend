@@ -44,6 +44,8 @@ and easy to extend as features are added.
     `false` for failed requests.
   - `status` should describe the outcome, such as `success`, `failure`, or
     route-specific values like `ok`.
+  - Response field names must be camel cased, including nested response
+    payloads such as `nextCursor`, `createdAt`, and `emailVerified`.
   - `data` contains only successful response payloads and should be omitted on
     errors.
   - `error` is an optional top-level string used only when a request fails.

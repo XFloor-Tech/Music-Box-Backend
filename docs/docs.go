@@ -409,7 +409,7 @@ const docTemplate = `{
         "auth.AuthSessionResponse": {
             "type": "object",
             "properties": {
-                "expires_at": {
+                "expiresAt": {
                     "type": "string"
                 }
             }
@@ -421,7 +421,7 @@ const docTemplate = `{
                     "type": "string",
                     "example": "user@example.com"
                 },
-                "email_verified": {
+                "emailVerified": {
                     "type": "boolean",
                     "example": false
                 },
@@ -584,7 +584,7 @@ const docTemplate = `{
         "track.TrackPaginationResponse": {
             "type": "object",
             "properties": {
-                "has_more": {
+                "hasMore": {
                     "type": "boolean",
                     "example": false
                 },
@@ -592,9 +592,9 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 20
                 },
-                "next_cursor": {
+                "nextCursor": {
                     "type": "string",
-                    "example": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNi0xMVQxMjowMDowMFoiLCJpZCI6InRya18xMjMifQ"
+                    "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTExVDEyOjAwOjAwWiIsImlkIjoidHJrXzEyMyJ9"
                 }
             }
         },
@@ -609,14 +609,14 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Artist name"
                 },
-                "created_at": {
+                "createdAt": {
                     "type": "string"
                 },
-                "disc_number": {
+                "discNumber": {
                     "type": "integer",
                     "example": 1
                 },
-                "duration_ms": {
+                "durationMs": {
                     "type": "integer",
                     "example": 180000
                 },
@@ -636,7 +636,7 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": {}
                 },
-                "release_year": {
+                "releaseYear": {
                     "type": "integer",
                     "example": 2026
                 },
@@ -652,11 +652,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Song title"
                 },
-                "track_number": {
+                "trackNumber": {
                     "type": "integer",
                     "example": 1
                 },
-                "updated_at": {
+                "updatedAt": {
                     "type": "string"
                 },
                 "visibility": {
@@ -773,7 +773,7 @@ const docTemplate = `{
                     "type": "string",
                     "example": "user@example.com"
                 },
-                "email_verified": {
+                "emailVerified": {
                     "type": "boolean",
                     "example": false
                 },

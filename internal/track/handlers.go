@@ -32,8 +32,8 @@ type TrackDetailResponseData struct {
 
 type TrackPaginationResponse struct {
 	Limit      int     `json:"limit" example:"20"`
-	HasMore    bool    `json:"has_more" example:"false"`
-	NextCursor *string `json:"next_cursor,omitempty" example:"eyJjcmVhdGVkX2F0IjoiMjAyNi0wNi0xMVQxMjowMDowMFoiLCJpZCI6InRya18xMjMifQ"`
+	HasMore    bool    `json:"hasMore" example:"false"`
+	NextCursor *string `json:"nextCursor,omitempty" example:"eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTExVDEyOjAwOjAwWiIsImlkIjoidHJrXzEyMyJ9"`
 }
 
 type TrackResponse struct {
@@ -42,16 +42,16 @@ type TrackResponse struct {
 	Artist      *string        `json:"artist,omitempty" example:"Artist name"`
 	Album       *string        `json:"album,omitempty" example:"Album title"`
 	Genre       *string        `json:"genre,omitempty" example:"electronic"`
-	ReleaseYear *int           `json:"release_year,omitempty" example:"2026"`
-	TrackNumber *int           `json:"track_number,omitempty" example:"1"`
-	DiscNumber  *int           `json:"disc_number,omitempty" example:"1"`
-	DurationMs  *int           `json:"duration_ms,omitempty" example:"180000"`
+	ReleaseYear *int           `json:"releaseYear,omitempty" example:"2026"`
+	TrackNumber *int           `json:"trackNumber,omitempty" example:"1"`
+	DiscNumber  *int           `json:"discNumber,omitempty" example:"1"`
+	DurationMs  *int           `json:"durationMs,omitempty" example:"180000"`
 	Explicit    bool           `json:"explicit" example:"false"`
 	Visibility  Visibility     `json:"visibility" example:"private"`
 	Status      Status         `json:"status" example:"draft"`
 	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
 type TrackErrorResponse struct {

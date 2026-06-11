@@ -2,6 +2,7 @@ package track
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -79,10 +80,47 @@ func TestHandleListTracksReturnsAuthenticatedUserTracks(t *testing.T) {
 		t.Fatalf("pagination limit = %d, want %d", response.Data.Pagination.Limit, defaultTrackListLimit)
 	}
 	if response.Data.Pagination.HasMore {
-		t.Fatal("pagination has_more = true, want false")
+		t.Fatal("pagination hasMore = true, want false")
 	}
 	if response.Data.Pagination.NextCursor != nil {
-		t.Fatalf("pagination next_cursor = %q, want nil", *response.Data.Pagination.NextCursor)
+		t.Fatalf("pagination nextCursor = %q, want nil", *response.Data.Pagination.NextCursor)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("Unmarshal() raw error = %v", err)
+	}
+	data, ok := raw["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %T, want object", raw["data"])
+	}
+	pagination, ok := data["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("pagination = %T, want object", data["pagination"])
+	}
+	if pagination["hasMore"] != false {
+		t.Fatalf("hasMore = %v, want false", pagination["hasMore"])
+	}
+	if _, ok := pagination["has_more"]; ok {
+		t.Fatalf("has_more = %v, want absent", pagination["has_more"])
+	}
+	tracks, ok := data["tracks"].([]any)
+	if !ok || len(tracks) != 1 {
+		t.Fatalf("tracks = %T len %d, want one item", data["tracks"], len(tracks))
+	}
+	rawTrack, ok := tracks[0].(map[string]any)
+	if !ok {
+		t.Fatalf("track = %T, want object", tracks[0])
+	}
+	for _, key := range []string{"durationMs", "createdAt", "updatedAt"} {
+		if _, ok := rawTrack[key]; !ok {
+			t.Fatalf("%s is absent", key)
+		}
+	}
+	for _, key := range []string{"duration_ms", "created_at", "updated_at"} {
+		if _, ok := rawTrack[key]; ok {
+			t.Fatalf("%s = %v, want absent", key, rawTrack[key])
+		}
 	}
 
 	track := response.Data.Tracks[0]
@@ -96,7 +134,7 @@ func TestHandleListTracksReturnsAuthenticatedUserTracks(t *testing.T) {
 		t.Fatalf("artist = %#v, want Artist", track.Artist)
 	}
 	if track.DurationMs == nil || *track.DurationMs != durationMs {
-		t.Fatalf("duration_ms = %#v, want %d", track.DurationMs, durationMs)
+		t.Fatalf("durationMs = %#v, want %d", track.DurationMs, durationMs)
 	}
 	if !track.Explicit {
 		t.Fatal("explicit = false, want true")
@@ -210,10 +248,10 @@ func TestHandleListTracksAppliesPaginationAndFilters(t *testing.T) {
 		t.Fatalf("pagination limit = %d, want 2", response.Data.Pagination.Limit)
 	}
 	if !response.Data.Pagination.HasMore {
-		t.Fatal("pagination has_more = false, want true")
+		t.Fatal("pagination hasMore = false, want true")
 	}
 	if response.Data.Pagination.NextCursor == nil {
-		t.Fatal("pagination next_cursor = nil, want value")
+		t.Fatal("pagination nextCursor = nil, want value")
 	}
 
 	nextCursor, err := decodeTrackListCursor(*response.Data.Pagination.NextCursor)
@@ -225,6 +263,45 @@ func TestHandleListTracksAppliesPaginationAndFilters(t *testing.T) {
 	}
 	if !nextCursor.CreatedAt.Equal(secondCreatedAt) {
 		t.Fatalf("next cursor created_at = %s, want %s", nextCursor.CreatedAt, secondCreatedAt)
+	}
+}
+
+func TestTrackListCursorUsesCamelCaseAndAcceptsLegacySnakeCase(t *testing.T) {
+	createdAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	cursor, err := encodeTrackListCursor(Track{
+		ID:        "trk_123",
+		CreatedAt: createdAt,
+	})
+	if err != nil {
+		t.Fatalf("encodeTrackListCursor() error = %v", err)
+	}
+
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		t.Fatalf("DecodeString() error = %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if _, ok := payload["createdAt"]; !ok {
+		t.Fatal("createdAt is absent")
+	}
+	if _, ok := payload["created_at"]; ok {
+		t.Fatalf("created_at = %v, want absent", payload["created_at"])
+	}
+
+	legacyRaw := `{"created_at":"2026-06-11T12:00:00Z","id":"trk_123"}`
+	legacyCursor := base64.RawURLEncoding.EncodeToString([]byte(legacyRaw))
+	decoded, err := decodeTrackListCursor(legacyCursor)
+	if err != nil {
+		t.Fatalf("decodeTrackListCursor() legacy error = %v", err)
+	}
+	if decoded.ID != "trk_123" {
+		t.Fatalf("legacy cursor id = %q, want trk_123", decoded.ID)
+	}
+	if !decoded.CreatedAt.Equal(createdAt) {
+		t.Fatalf("legacy cursor createdAt = %s, want %s", decoded.CreatedAt, createdAt)
 	}
 }
 

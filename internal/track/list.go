@@ -42,8 +42,26 @@ func (err *requestError) Error() string {
 }
 
 type trackListCursorPayload struct {
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"createdAt"`
 	ID        string    `json:"id"`
+}
+
+func (p *trackListCursorPayload) UnmarshalJSON(data []byte) error {
+	type cursorPayload trackListCursorPayload
+	payload := struct {
+		cursorPayload
+		LegacyCreatedAt time.Time `json:"created_at"`
+	}{}
+
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	if payload.CreatedAt.IsZero() {
+		payload.CreatedAt = payload.LegacyCreatedAt
+	}
+
+	*p = trackListCursorPayload(payload.cursorPayload)
+	return nil
 }
 
 func listTracksOptionsFromRequest(r *http.Request) (ListTracksOptions, error) {

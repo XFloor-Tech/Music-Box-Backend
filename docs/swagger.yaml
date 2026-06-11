@@ -32,7 +32,7 @@ definitions:
     type: object
   auth.AuthSessionResponse:
     properties:
-      expires_at:
+      expiresAt:
         type: string
     type: object
   auth.AuthUserResponse:
@@ -40,7 +40,7 @@ definitions:
       email:
         example: user@example.com
         type: string
-      email_verified:
+      emailVerified:
         example: false
         type: boolean
       id:
@@ -157,14 +157,14 @@ definitions:
     type: object
   track.TrackPaginationResponse:
     properties:
-      has_more:
+      hasMore:
         example: false
         type: boolean
       limit:
         example: 20
         type: integer
-      next_cursor:
-        example: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNi0xMVQxMjowMDowMFoiLCJpZCI6InRya18xMjMifQ
+      nextCursor:
+        example: eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTExVDEyOjAwOjAwWiIsImlkIjoidHJrXzEyMyJ9
         type: string
     type: object
   track.TrackResponse:
@@ -175,12 +175,12 @@ definitions:
       artist:
         example: Artist name
         type: string
-      created_at:
+      createdAt:
         type: string
-      disc_number:
+      discNumber:
         example: 1
         type: integer
-      duration_ms:
+      durationMs:
         example: 180000
         type: integer
       explicit:
@@ -195,7 +195,7 @@ definitions:
       metadata:
         additionalProperties: {}
         type: object
-      release_year:
+      releaseYear:
         example: 2026
         type: integer
       status:
@@ -205,10 +205,10 @@ definitions:
       title:
         example: Song title
         type: string
-      track_number:
+      trackNumber:
         example: 1
         type: integer
-      updated_at:
+      updatedAt:
         type: string
       visibility:
         allOf:
@@ -287,7 +287,7 @@ definitions:
       email:
         example: user@example.com
         type: string
-      email_verified:
+      emailVerified:
         example: false
         type: boolean
       id:
