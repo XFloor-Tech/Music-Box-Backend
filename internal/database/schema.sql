@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS "track" (
 );
 
 CREATE INDEX IF NOT EXISTS track_user_id_idx ON "track" ("userId");
+CREATE INDEX IF NOT EXISTS track_user_created_at_id_idx ON "track" ("userId", "createdAt" DESC, id DESC);
 CREATE INDEX IF NOT EXISTS track_status_idx ON "track" (status);
 CREATE INDEX IF NOT EXISTS track_visibility_idx ON "track" (visibility);
 

@@ -10,12 +10,15 @@ import (
 )
 
 type Module struct {
-	repo Repository
+	service *Service
 }
 
-func Setup(ctx context.Context, repo database.Repository) (*Module, error) {
+func Setup(ctx context.Context, repo database.Repository, auth Authenticator) (*Module, error) {
 	if repo == nil {
 		return nil, fmt.Errorf("track repository is required")
+	}
+	if auth == nil {
+		return nil, fmt.Errorf("track auth module is required")
 	}
 
 	tracks := NewPostgresRepository(repo)
@@ -24,12 +27,14 @@ func Setup(ctx context.Context, repo database.Repository) (*Module, error) {
 	}
 
 	return &Module{
-		repo: tracks,
+		service: NewService(tracks, auth),
 	}, nil
 }
 
-func (m *Module) RegisterRoutes(_ chi.Router) {
-	if m == nil || m.repo == nil {
+func (m *Module) RegisterRoutes(r chi.Router) {
+	if m == nil || m.service == nil {
 		return
 	}
+
+	r.Get("/tracks", m.handleListTracks)
 }

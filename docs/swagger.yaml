@@ -111,6 +111,124 @@ definitions:
         example: music-player
         type: string
     type: object
+  track.Status:
+    enum:
+    - draft
+    - uploading
+    - processing
+    - ready
+    - failed
+    - deleted
+    type: string
+    x-enum-varnames:
+    - StatusDraft
+    - StatusUploading
+    - StatusProcessing
+    - StatusReady
+    - StatusFailed
+    - StatusDeleted
+  track.TrackErrorResponse:
+    properties:
+      error:
+        example: authentication required
+        type: string
+      status:
+        example: failure
+        type: string
+      success:
+        example: false
+        type: boolean
+    type: object
+  track.TrackPaginationResponse:
+    properties:
+      has_more:
+        example: false
+        type: boolean
+      limit:
+        example: 20
+        type: integer
+      next_cursor:
+        example: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNi0xMVQxMjowMDowMFoiLCJpZCI6InRya18xMjMifQ
+        type: string
+    type: object
+  track.TrackResponse:
+    properties:
+      album:
+        example: Album title
+        type: string
+      artist:
+        example: Artist name
+        type: string
+      created_at:
+        type: string
+      disc_number:
+        example: 1
+        type: integer
+      duration_ms:
+        example: 180000
+        type: integer
+      explicit:
+        example: false
+        type: boolean
+      genre:
+        example: electronic
+        type: string
+      id:
+        example: trk_abc123
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      release_year:
+        example: 2026
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/track.Status'
+        example: draft
+      title:
+        example: Song title
+        type: string
+      track_number:
+        example: 1
+        type: integer
+      updated_at:
+        type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/track.Visibility'
+        example: private
+    type: object
+  track.TracksResponse:
+    properties:
+      data:
+        $ref: '#/definitions/track.TracksResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  track.TracksResponseData:
+    properties:
+      pagination:
+        $ref: '#/definitions/track.TrackPaginationResponse'
+      tracks:
+        items:
+          $ref: '#/definitions/track.TrackResponse'
+        type: array
+    type: object
+  track.Visibility:
+    enum:
+    - private
+    - unlisted
+    - public
+    type: string
+    x-enum-varnames:
+    - VisibilityPrivate
+    - VisibilityUnlisted
+    - VisibilityPublic
   user.MeResponse:
     properties:
       data:
@@ -314,6 +432,60 @@ paths:
       summary: Sign up
       tags:
       - auth
+  /tracks:
+    get:
+      description: Returns tracks owned by the authenticated user.
+      parameters:
+      - description: Maximum tracks to return. Defaults to 20 and is capped at 100.
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - description: Opaque cursor returned by a previous list response.
+        in: query
+        name: cursor
+        type: string
+      - description: Track status filter. Soft-deleted tracks are not returned.
+        enum:
+        - draft
+        - uploading
+        - processing
+        - ready
+        - failed
+        in: query
+        name: status
+        type: string
+      - description: Track visibility filter.
+        enum:
+        - private
+        - unlisted
+        - public
+        in: query
+        name: visibility
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/track.TracksResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+      summary: List tracks
+      tags:
+      - tracks
 schemes:
 - http
 swagger: "2.0"

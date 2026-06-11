@@ -228,6 +228,84 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/tracks": {
+            "get": {
+                "description": "Returns tracks owned by the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tracks"
+                ],
+                "summary": "List tracks",
+                "parameters": [
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Maximum tracks to return. Defaults to 20 and is capped at 100.",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor returned by a previous list response.",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "draft",
+                            "uploading",
+                            "processing",
+                            "ready",
+                            "failed"
+                        ],
+                        "type": "string",
+                        "description": "Track status filter. Soft-deleted tracks are not returned.",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "private",
+                            "unlisted",
+                            "public"
+                        ],
+                        "type": "string",
+                        "description": "Track visibility filter.",
+                        "name": "visibility",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/track.TracksResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -389,6 +467,173 @@ const docTemplate = `{
                     "example": "music-player"
                 }
             }
+        },
+        "track.Status": {
+            "type": "string",
+            "enum": [
+                "draft",
+                "uploading",
+                "processing",
+                "ready",
+                "failed",
+                "deleted"
+            ],
+            "x-enum-varnames": [
+                "StatusDraft",
+                "StatusUploading",
+                "StatusProcessing",
+                "StatusReady",
+                "StatusFailed",
+                "StatusDeleted"
+            ]
+        },
+        "track.TrackErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "authentication required"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "failure"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "track.TrackPaginationResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "limit": {
+                    "type": "integer",
+                    "example": 20
+                },
+                "next_cursor": {
+                    "type": "string",
+                    "example": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNi0xMVQxMjowMDowMFoiLCJpZCI6InRya18xMjMifQ"
+                }
+            }
+        },
+        "track.TrackResponse": {
+            "type": "object",
+            "properties": {
+                "album": {
+                    "type": "string",
+                    "example": "Album title"
+                },
+                "artist": {
+                    "type": "string",
+                    "example": "Artist name"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "disc_number": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "duration_ms": {
+                    "type": "integer",
+                    "example": 180000
+                },
+                "explicit": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "genre": {
+                    "type": "string",
+                    "example": "electronic"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "trk_abc123"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "release_year": {
+                    "type": "integer",
+                    "example": 2026
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/track.Status"
+                        }
+                    ],
+                    "example": "draft"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Song title"
+                },
+                "track_number": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "visibility": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/track.Visibility"
+                        }
+                    ],
+                    "example": "private"
+                }
+            }
+        },
+        "track.TracksResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/track.TracksResponseData"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "track.TracksResponseData": {
+            "type": "object",
+            "properties": {
+                "pagination": {
+                    "$ref": "#/definitions/track.TrackPaginationResponse"
+                },
+                "tracks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/track.TrackResponse"
+                    }
+                }
+            }
+        },
+        "track.Visibility": {
+            "type": "string",
+            "enum": [
+                "private",
+                "unlisted",
+                "public"
+            ],
+            "x-enum-varnames": [
+                "VisibilityPrivate",
+                "VisibilityUnlisted",
+                "VisibilityPublic"
+            ]
         },
         "user.MeResponse": {
             "type": "object",

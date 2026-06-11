@@ -67,7 +67,7 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		return nil, fmt.Errorf("initialize user module: %w", err)
 	}
 
-	tracks, err := trackmodule.Setup(ctx, db)
+	tracks, err := trackmodule.Setup(ctx, db, auth)
 	if err != nil {
 		return nil, fmt.Errorf("initialize track module: %w", err)
 	}

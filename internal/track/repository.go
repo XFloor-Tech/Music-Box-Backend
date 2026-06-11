@@ -2,7 +2,11 @@ package track
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"xfloor/music-box-backend/internal/database"
 )
@@ -90,9 +94,10 @@ CREATE TABLE IF NOT EXISTS "track" (
 	CONSTRAINT track_metadata_object CHECK (jsonb_typeof(metadata) = 'object')
 )`
 
-	createTrackUserIndexSQL       = `CREATE INDEX IF NOT EXISTS track_user_id_idx ON "track" ("userId")`
-	createTrackStatusIndexSQL     = `CREATE INDEX IF NOT EXISTS track_status_idx ON "track" (status)`
-	createTrackVisibilityIndexSQL = `CREATE INDEX IF NOT EXISTS track_visibility_idx ON "track" (visibility)`
+	createTrackUserIndexSQL        = `CREATE INDEX IF NOT EXISTS track_user_id_idx ON "track" ("userId")`
+	createTrackUserCreatedIndexSQL = `CREATE INDEX IF NOT EXISTS track_user_created_at_id_idx ON "track" ("userId", "createdAt" DESC, id DESC)`
+	createTrackStatusIndexSQL      = `CREATE INDEX IF NOT EXISTS track_status_idx ON "track" (status)`
+	createTrackVisibilityIndexSQL  = `CREATE INDEX IF NOT EXISTS track_visibility_idx ON "track" (visibility)`
 
 	createTrackMediaTableSQL = `
 CREATE TABLE IF NOT EXISTS track_media (
@@ -217,6 +222,7 @@ const (
 
 type Repository interface {
 	EnsureSchema(ctx context.Context) error
+	ListByUserID(ctx context.Context, userID string, options ListTracksOptions) ([]Track, error)
 }
 
 type PostgresRepository struct {
@@ -245,6 +251,7 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 		createTrackMediaPackagingEnumSQL,
 		createTrackTableSQL,
 		createTrackUserIndexSQL,
+		createTrackUserCreatedIndexSQL,
 		createTrackStatusIndexSQL,
 		createTrackVisibilityIndexSQL,
 		createTrackMediaTableSQL,
@@ -260,4 +267,158 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+type Track struct {
+	ID          string
+	UserID      string
+	Title       string
+	Artist      *string
+	Album       *string
+	Genre       *string
+	ReleaseYear *int
+	TrackNumber *int
+	DiscNumber  *int
+	DurationMs  *int
+	Explicit    bool
+	Visibility  Visibility
+	Status      Status
+	Metadata    map[string]any
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (r *PostgresRepository) ListByUserID(ctx context.Context, userID string, options ListTracksOptions) ([]Track, error) {
+	if r == nil || r.repo == nil {
+		return nil, fmt.Errorf("track repository is not configured")
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, nil
+	}
+
+	options = normalizedRepositoryListTracksOptions(options)
+
+	args := []any{userID}
+	where := []string{`"userId" = $1`, `status <> 'deleted'::track_status`}
+
+	if options.Status != nil {
+		args = append(args, string(*options.Status))
+		where = append(where, fmt.Sprintf("status = $%d::track_status", len(args)))
+	}
+
+	if options.Visibility != nil {
+		args = append(args, string(*options.Visibility))
+		where = append(where, fmt.Sprintf("visibility = $%d::track_visibility", len(args)))
+	}
+
+	if options.Cursor != nil {
+		args = append(args, options.Cursor.CreatedAt, options.Cursor.ID)
+		where = append(where, fmt.Sprintf(`("createdAt", id) < ($%d, $%d)`, len(args)-1, len(args)))
+	}
+
+	args = append(args, options.Limit)
+	query := fmt.Sprintf(`
+SELECT id, "userId", title, artist, album, genre, "releaseYear", "trackNumber", "discNumber", "durationMs",
+	explicit, visibility, status, metadata, "createdAt", "updatedAt"
+FROM "track"
+WHERE %s
+ORDER BY "createdAt" DESC, id DESC
+LIMIT $%d
+`, strings.Join(where, " AND "), len(args))
+
+	rows, err := r.repo.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tracks := []Track{}
+	for rows.Next() {
+		var track Track
+		var artist sql.NullString
+		var album sql.NullString
+		var genre sql.NullString
+		var releaseYear sql.NullInt64
+		var trackNumber sql.NullInt64
+		var discNumber sql.NullInt64
+		var durationMs sql.NullInt64
+		var visibility string
+		var status string
+		var metadata []byte
+
+		if err := rows.Scan(
+			&track.ID,
+			&track.UserID,
+			&track.Title,
+			&artist,
+			&album,
+			&genre,
+			&releaseYear,
+			&trackNumber,
+			&discNumber,
+			&durationMs,
+			&track.Explicit,
+			&visibility,
+			&status,
+			&metadata,
+			&track.CreatedAt,
+			&track.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		track.Artist = optionalString(artist)
+		track.Album = optionalString(album)
+		track.Genre = optionalString(genre)
+		track.ReleaseYear = optionalInt(releaseYear)
+		track.TrackNumber = optionalInt(trackNumber)
+		track.DiscNumber = optionalInt(discNumber)
+		track.DurationMs = optionalInt(durationMs)
+		track.Visibility = Visibility(visibility)
+		track.Status = Status(status)
+		track.Metadata, err = metadataObject(metadata)
+		if err != nil {
+			return nil, err
+		}
+
+		tracks = append(tracks, track)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tracks, nil
+}
+
+func optionalString(value sql.NullString) *string {
+	if !value.Valid {
+		return nil
+	}
+
+	return &value.String
+}
+
+func optionalInt(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+
+	converted := int(value.Int64)
+	return &converted
+}
+
+func metadataObject(raw []byte) (map[string]any, error) {
+	if len(raw) == 0 {
+		return map[string]any{}, nil
+	}
+
+	metadata := map[string]any{}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return nil, err
+	}
+
+	return metadata, nil
 }
