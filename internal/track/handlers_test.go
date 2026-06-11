@@ -11,6 +11,7 @@ import (
 
 	"github.com/aarondl/authboss/v3"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	authmodule "xfloor/music-box-backend/internal/auth"
 )
@@ -263,6 +264,52 @@ func TestHandleListTracksAppliesPaginationAndFilters(t *testing.T) {
 	}
 	if !nextCursor.CreatedAt.Equal(secondCreatedAt) {
 		t.Fatalf("next cursor created_at = %s, want %s", nextCursor.CreatedAt, secondCreatedAt)
+	}
+}
+
+func TestHandleListTracksReturnsEmptyListWhenUserHasNoTracks(t *testing.T) {
+	repo := &stubTrackRepository{
+		err: pgx.ErrNoRows,
+	}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/tracks", nil)
+	recorder := httptest.NewRecorder()
+
+	module.handleListTracks(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if len(repo.listedUserIDs) != 1 || repo.listedUserIDs[0] != "usr_123" {
+		t.Fatalf("listed user ids = %#v, want usr_123", repo.listedUserIDs)
+	}
+
+	var response TracksResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !response.Success {
+		t.Fatal("success = false, want true")
+	}
+	if response.Status != "success" {
+		t.Fatalf("status = %q, want success", response.Status)
+	}
+	if len(response.Data.Tracks) != 0 {
+		t.Fatalf("tracks len = %d, want 0", len(response.Data.Tracks))
+	}
+	if response.Data.Pagination.Limit != defaultTrackListLimit {
+		t.Fatalf("pagination limit = %d, want %d", response.Data.Pagination.Limit, defaultTrackListLimit)
+	}
+	if response.Data.Pagination.HasMore {
+		t.Fatal("pagination hasMore = true, want false")
+	}
+	if response.Data.Pagination.NextCursor != nil {
+		t.Fatalf("pagination nextCursor = %q, want nil", *response.Data.Pagination.NextCursor)
 	}
 }
 

@@ -141,6 +141,81 @@ CREATE TABLE IF NOT EXISTS track_media (
 	createTrackMediaKindIndexSQL   = `CREATE INDEX IF NOT EXISTS track_media_kind_idx ON track_media (kind)`
 )
 
+type legacyColumnRename struct {
+	current string
+	legacy  []string
+}
+
+type columnDefinition struct {
+	name       string
+	definition string
+}
+
+var legacyTrackColumnRenames = []legacyColumnRename{
+	{current: "userId", legacy: []string{"user_id", "userid"}},
+	{current: "releaseYear", legacy: []string{"release_year", "releaseyear"}},
+	{current: "trackNumber", legacy: []string{"track_number", "tracknumber"}},
+	{current: "discNumber", legacy: []string{"disc_number", "discnumber"}},
+	{current: "durationMs", legacy: []string{"duration_ms", "durationms"}},
+	{current: "createdAt", legacy: []string{"created_at", "createdat"}},
+	{current: "updatedAt", legacy: []string{"updated_at", "updatedat"}},
+}
+
+var trackColumnDefinitions = []columnDefinition{
+	{name: "artist", definition: "TEXT"},
+	{name: "album", definition: "TEXT"},
+	{name: "genre", definition: "TEXT"},
+	{name: "releaseYear", definition: "INTEGER"},
+	{name: "trackNumber", definition: "INTEGER"},
+	{name: "discNumber", definition: "INTEGER"},
+	{name: "durationMs", definition: "INTEGER"},
+	{name: "explicit", definition: "BOOLEAN NOT NULL DEFAULT FALSE"},
+	{name: "visibility", definition: "track_visibility NOT NULL DEFAULT 'private'"},
+	{name: "status", definition: "track_status NOT NULL DEFAULT 'draft'"},
+	{name: "metadata", definition: "JSONB NOT NULL DEFAULT '{}'::jsonb"},
+	{name: "createdAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+	{name: "updatedAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+}
+
+var legacyTrackMediaColumnRenames = []legacyColumnRename{
+	{current: "trackId", legacy: []string{"track_id", "trackid"}},
+	{current: "storageProvider", legacy: []string{"storage_provider", "storageprovider"}},
+	{current: "objectKey", legacy: []string{"object_key", "objectkey"}},
+	{current: "objectPrefix", legacy: []string{"object_prefix", "objectprefix"}},
+	{current: "manifestKey", legacy: []string{"manifest_key", "manifestkey"}},
+	{current: "mimeType", legacy: []string{"mime_type", "mimetype"}},
+	{current: "sizeBytes", legacy: []string{"size_bytes", "sizebytes"}},
+	{current: "bitrateBps", legacy: []string{"bitrate_bps", "bitratebps"}},
+	{current: "sampleRateHz", legacy: []string{"sample_rate_hz", "sampleratehz"}},
+	{current: "channelCount", legacy: []string{"channel_count", "channelcount"}},
+	{current: "durationMs", legacy: []string{"duration_ms", "durationms"}},
+	{current: "checksumSha256", legacy: []string{"checksum_sha256", "checksumsha256"}},
+	{current: "createdAt", legacy: []string{"created_at", "createdat"}},
+	{current: "updatedAt", legacy: []string{"updated_at", "updatedat"}},
+}
+
+var trackMediaColumnDefinitions = []columnDefinition{
+	{name: "storageProvider", definition: "track_storage_provider NOT NULL DEFAULT 'r2'"},
+	{name: "bucket", definition: "TEXT"},
+	{name: "objectKey", definition: "TEXT"},
+	{name: "objectPrefix", definition: "TEXT"},
+	{name: "manifestKey", definition: "TEXT"},
+	{name: "container", definition: "track_media_container"},
+	{name: "codec", definition: "track_audio_codec"},
+	{name: "packaging", definition: "track_media_packaging"},
+	{name: "mimeType", definition: "TEXT"},
+	{name: "sizeBytes", definition: "BIGINT"},
+	{name: "bitrateBps", definition: "INTEGER"},
+	{name: "sampleRateHz", definition: "INTEGER"},
+	{name: "channelCount", definition: "INTEGER"},
+	{name: "durationMs", definition: "INTEGER"},
+	{name: "checksumSha256", definition: "TEXT"},
+	{name: "error", definition: "TEXT"},
+	{name: "metadata", definition: "JSONB NOT NULL DEFAULT '{}'::jsonb"},
+	{name: "createdAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+	{name: "updatedAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+}
+
 type Visibility string
 
 const (
@@ -254,15 +329,23 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 		createTrackAudioCodecEnumSQL,
 		createTrackMediaPackagingEnumSQL,
 		createTrackTableSQL,
+	}
+	statements = append(statements, legacyColumnRenameStatements("track", legacyTrackColumnRenames)...)
+	statements = append(statements, addColumnIfMissingStatements("track", trackColumnDefinitions)...)
+	statements = append(statements,
 		createTrackUserIndexSQL,
 		createTrackUserCreatedIndexSQL,
 		createTrackStatusIndexSQL,
 		createTrackVisibilityIndexSQL,
 		createTrackMediaTableSQL,
+	)
+	statements = append(statements, legacyColumnRenameStatements("track_media", legacyTrackMediaColumnRenames)...)
+	statements = append(statements, addColumnIfMissingStatements("track_media", trackMediaColumnDefinitions)...)
+	statements = append(statements,
 		createTrackMediaTrackIndexSQL,
 		createTrackMediaStatusIndexSQL,
 		createTrackMediaKindIndexSQL,
-	}
+	)
 
 	for _, statement := range statements {
 		if _, err := r.repo.Exec(ctx, statement); err != nil {
@@ -271,6 +354,63 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func legacyColumnRenameStatements(table string, renames []legacyColumnRename) []string {
+	statements := []string{}
+	for _, rename := range renames {
+		for _, legacy := range rename.legacy {
+			statements = append(statements, legacyColumnRenameStatement(table, legacy, rename.current))
+		}
+	}
+
+	return statements
+}
+
+func legacyColumnRenameStatement(table, legacy, current string) string {
+	return fmt.Sprintf(`
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s
+	) AND NOT EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s
+	) THEN
+		ALTER TABLE %s RENAME COLUMN %s TO %s;
+	END IF;
+END $$`,
+		sqlStringLiteral(table),
+		sqlStringLiteral(legacy),
+		sqlStringLiteral(table),
+		sqlStringLiteral(current),
+		sqlIdentifier(table),
+		sqlIdentifier(legacy),
+		sqlIdentifier(current),
+	)
+}
+
+func addColumnIfMissingStatements(table string, columns []columnDefinition) []string {
+	statements := make([]string, 0, len(columns))
+	for _, column := range columns {
+		statements = append(statements, fmt.Sprintf(
+			`ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s`,
+			sqlIdentifier(table),
+			sqlIdentifier(column.name),
+			column.definition,
+		))
+	}
+
+	return statements
+}
+
+func sqlStringLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func sqlIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
 
 type Track struct {

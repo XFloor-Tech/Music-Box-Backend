@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aarondl/authboss/v3"
+	"github.com/jackc/pgx/v5"
 
 	authmodule "xfloor/music-box-backend/internal/auth"
 )
@@ -47,6 +48,12 @@ func (s *Service) ListTracks(w http.ResponseWriter, r *http.Request) (TrackListP
 	repoOptions := options
 	repoOptions.Limit = options.Limit + 1
 	tracks, err := s.repo.ListByUserID(req.Context(), authUser.ID, repoOptions)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TrackListPage{
+			Tracks: []Track{},
+			Limit:  options.Limit,
+		}, nil
+	}
 	if err != nil {
 		return TrackListPage{}, fmt.Errorf("list tracks: %w", err)
 	}
