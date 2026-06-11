@@ -302,6 +302,59 @@
                     }
                 }
             }
+        },
+        "/tracks/{trackID}": {
+            "get": {
+                "description": "Returns one track owned by the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tracks"
+                ],
+                "summary": "Get track",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Track ID",
+                        "name": "trackID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -482,6 +535,30 @@
                 "StatusFailed",
                 "StatusDeleted"
             ]
+        },
+        "track.TrackDetailResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/track.TrackDetailResponseData"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "track.TrackDetailResponseData": {
+            "type": "object",
+            "properties": {
+                "track": {
+                    "$ref": "#/definitions/track.TrackResponse"
+                }
+            }
         },
         "track.TrackErrorResponse": {
             "type": "object",

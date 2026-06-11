@@ -127,6 +127,22 @@ definitions:
     - StatusReady
     - StatusFailed
     - StatusDeleted
+  track.TrackDetailResponse:
+    properties:
+      data:
+        $ref: '#/definitions/track.TrackDetailResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  track.TrackDetailResponseData:
+    properties:
+      track:
+        $ref: '#/definitions/track.TrackResponse'
+    type: object
   track.TrackErrorResponse:
     properties:
       error:
@@ -484,6 +500,41 @@ paths:
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
       summary: List tracks
+      tags:
+      - tracks
+  /tracks/{trackID}:
+    get:
+      description: Returns one track owned by the authenticated user.
+      parameters:
+      - description: Track ID
+        in: path
+        name: trackID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/track.TrackDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+      summary: Get track
       tags:
       - tracks
 schemes:

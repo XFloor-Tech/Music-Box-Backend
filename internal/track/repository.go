@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"xfloor/music-box-backend/internal/database"
 )
@@ -223,6 +226,7 @@ const (
 type Repository interface {
 	EnsureSchema(ctx context.Context) error
 	ListByUserID(ctx context.Context, userID string, options ListTracksOptions) ([]Track, error)
+	GetByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error)
 }
 
 type PostgresRepository struct {
@@ -288,6 +292,9 @@ type Track struct {
 	UpdatedAt   time.Time
 }
 
+const trackSelectColumns = `id, "userId", title, artist, album, genre, "releaseYear", "trackNumber", "discNumber", "durationMs",
+	explicit, visibility, status, metadata, "createdAt", "updatedAt"`
+
 func (r *PostgresRepository) ListByUserID(ctx context.Context, userID string, options ListTracksOptions) ([]Track, error) {
 	if r == nil || r.repo == nil {
 		return nil, fmt.Errorf("track repository is not configured")
@@ -320,13 +327,12 @@ func (r *PostgresRepository) ListByUserID(ctx context.Context, userID string, op
 
 	args = append(args, options.Limit)
 	query := fmt.Sprintf(`
-SELECT id, "userId", title, artist, album, genre, "releaseYear", "trackNumber", "discNumber", "durationMs",
-	explicit, visibility, status, metadata, "createdAt", "updatedAt"
+SELECT %s
 FROM "track"
 WHERE %s
 ORDER BY "createdAt" DESC, id DESC
 LIMIT $%d
-`, strings.Join(where, " AND "), len(args))
+`, trackSelectColumns, strings.Join(where, " AND "), len(args))
 
 	rows, err := r.repo.Query(ctx, query, args...)
 	if err != nil {
@@ -336,49 +342,7 @@ LIMIT $%d
 
 	tracks := []Track{}
 	for rows.Next() {
-		var track Track
-		var artist sql.NullString
-		var album sql.NullString
-		var genre sql.NullString
-		var releaseYear sql.NullInt64
-		var trackNumber sql.NullInt64
-		var discNumber sql.NullInt64
-		var durationMs sql.NullInt64
-		var visibility string
-		var status string
-		var metadata []byte
-
-		if err := rows.Scan(
-			&track.ID,
-			&track.UserID,
-			&track.Title,
-			&artist,
-			&album,
-			&genre,
-			&releaseYear,
-			&trackNumber,
-			&discNumber,
-			&durationMs,
-			&track.Explicit,
-			&visibility,
-			&status,
-			&metadata,
-			&track.CreatedAt,
-			&track.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-
-		track.Artist = optionalString(artist)
-		track.Album = optionalString(album)
-		track.Genre = optionalString(genre)
-		track.ReleaseYear = optionalInt(releaseYear)
-		track.TrackNumber = optionalInt(trackNumber)
-		track.DiscNumber = optionalInt(discNumber)
-		track.DurationMs = optionalInt(durationMs)
-		track.Visibility = Visibility(visibility)
-		track.Status = Status(status)
-		track.Metadata, err = metadataObject(metadata)
+		track, err := scanTrack(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -391,6 +355,92 @@ LIMIT $%d
 	}
 
 	return tracks, nil
+}
+
+func (r *PostgresRepository) GetByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error) {
+	if r == nil || r.repo == nil {
+		return Track{}, false, fmt.Errorf("track repository is not configured")
+	}
+
+	userID = strings.TrimSpace(userID)
+	trackID = strings.TrimSpace(trackID)
+	if userID == "" || trackID == "" {
+		return Track{}, false, nil
+	}
+
+	query := fmt.Sprintf(`
+SELECT %s
+FROM "track"
+WHERE "userId" = $1 AND id = $2 AND status <> 'deleted'::track_status
+LIMIT 1
+`, trackSelectColumns)
+
+	track, err := scanTrack(r.repo.QueryRow(ctx, query, userID, trackID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Track{}, false, nil
+	}
+	if err != nil {
+		return Track{}, false, err
+	}
+
+	return track, true, nil
+}
+
+type trackScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTrack(scanner trackScanner) (Track, error) {
+	var track Track
+	var artist sql.NullString
+	var album sql.NullString
+	var genre sql.NullString
+	var releaseYear sql.NullInt64
+	var trackNumber sql.NullInt64
+	var discNumber sql.NullInt64
+	var durationMs sql.NullInt64
+	var visibility string
+	var status string
+	var metadata []byte
+
+	if err := scanner.Scan(
+		&track.ID,
+		&track.UserID,
+		&track.Title,
+		&artist,
+		&album,
+		&genre,
+		&releaseYear,
+		&trackNumber,
+		&discNumber,
+		&durationMs,
+		&track.Explicit,
+		&visibility,
+		&status,
+		&metadata,
+		&track.CreatedAt,
+		&track.UpdatedAt,
+	); err != nil {
+		return Track{}, err
+	}
+
+	track.Artist = optionalString(artist)
+	track.Album = optionalString(album)
+	track.Genre = optionalString(genre)
+	track.ReleaseYear = optionalInt(releaseYear)
+	track.TrackNumber = optionalInt(trackNumber)
+	track.DiscNumber = optionalInt(discNumber)
+	track.DurationMs = optionalInt(durationMs)
+	track.Visibility = Visibility(visibility)
+	track.Status = Status(status)
+
+	var err error
+	track.Metadata, err = metadataObject(metadata)
+	if err != nil {
+		return Track{}, err
+	}
+
+	return track, nil
 }
 
 func optionalString(value sql.NullString) *string {

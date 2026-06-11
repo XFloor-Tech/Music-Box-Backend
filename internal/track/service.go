@@ -11,7 +11,10 @@ import (
 	authmodule "xfloor/music-box-backend/internal/auth"
 )
 
-var ErrNotAuthenticated = errors.New("authentication required")
+var (
+	ErrNotAuthenticated = errors.New("authentication required")
+	ErrTrackNotFound    = errors.New("track not found")
+)
 
 type Authenticator interface {
 	LoadAuthenticatedUser(http.ResponseWriter, *http.Request) (*authmodule.User, *http.Request, error)
@@ -30,22 +33,9 @@ func NewService(repo Repository, auth Authenticator) *Service {
 }
 
 func (s *Service) ListTracks(w http.ResponseWriter, r *http.Request) (TrackListPage, error) {
-	if s == nil || s.repo == nil || s.auth == nil {
-		return TrackListPage{}, fmt.Errorf("track service is not configured")
-	}
-
-	authUser, req, err := s.auth.LoadAuthenticatedUser(w, r)
-	if errors.Is(err, authboss.ErrUserNotFound) {
-		return TrackListPage{}, ErrNotAuthenticated
-	}
+	authUser, req, err := s.loadAuthenticatedUser(w, r)
 	if err != nil {
-		return TrackListPage{}, fmt.Errorf("load authenticated user: %w", err)
-	}
-	if authUser == nil || strings.TrimSpace(authUser.ID) == "" {
-		return TrackListPage{}, ErrNotAuthenticated
-	}
-	if req == nil {
-		req = r
+		return TrackListPage{}, err
 	}
 
 	options, err := listTracksOptionsFromRequest(req)
@@ -78,4 +68,48 @@ func (s *Service) ListTracks(w http.ResponseWriter, r *http.Request) (TrackListP
 		Limit:      options.Limit,
 		NextCursor: &nextCursor,
 	}, nil
+}
+
+func (s *Service) GetTrack(w http.ResponseWriter, r *http.Request, trackID string) (Track, error) {
+	authUser, req, err := s.loadAuthenticatedUser(w, r)
+	if err != nil {
+		return Track{}, err
+	}
+
+	trackID = strings.TrimSpace(trackID)
+	if trackID == "" {
+		return Track{}, &requestError{Message: "track_id is required"}
+	}
+
+	track, ok, err := s.repo.GetByIDForUser(req.Context(), authUser.ID, trackID)
+	if err != nil {
+		return Track{}, fmt.Errorf("get track: %w", err)
+	}
+	if !ok {
+		return Track{}, ErrTrackNotFound
+	}
+
+	return track, nil
+}
+
+func (s *Service) loadAuthenticatedUser(w http.ResponseWriter, r *http.Request) (*authmodule.User, *http.Request, error) {
+	if s == nil || s.repo == nil || s.auth == nil {
+		return nil, nil, fmt.Errorf("track service is not configured")
+	}
+
+	authUser, req, err := s.auth.LoadAuthenticatedUser(w, r)
+	if errors.Is(err, authboss.ErrUserNotFound) {
+		return nil, nil, ErrNotAuthenticated
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("load authenticated user: %w", err)
+	}
+	if authUser == nil || strings.TrimSpace(authUser.ID) == "" {
+		return nil, nil, ErrNotAuthenticated
+	}
+	if req == nil {
+		req = r
+	}
+
+	return authUser, req, nil
 }

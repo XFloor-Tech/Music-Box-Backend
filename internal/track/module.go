@@ -37,4 +37,5 @@ func (m *Module) RegisterRoutes(r chi.Router) {
 	}
 
 	r.Get("/tracks", m.handleListTracks)
+	r.Get("/tracks/{trackID}", m.handleGetTrack)
 }

@@ -3,7 +3,7 @@
 ## API Surface
 
 - [x] `GET /tracks` lists the authenticated user's tracks.
-- [ ] `GET /tracks/{trackID}` returns one track owned by the authenticated user.
+- [x] `GET /tracks/{trackID}` returns one track owned by the authenticated user.
 - [ ] `POST /tracks` creates a single upload intent for one track.
 - [ ] `PATCH /tracks/{trackID}` edits track metadata.
 - [ ] `DELETE /tracks/{trackID}` soft-deletes one track.

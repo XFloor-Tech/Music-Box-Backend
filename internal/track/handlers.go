@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type TracksResponse struct {
@@ -16,6 +18,16 @@ type TracksResponse struct {
 type TracksResponseData struct {
 	Tracks     []TrackResponse         `json:"tracks"`
 	Pagination TrackPaginationResponse `json:"pagination"`
+}
+
+type TrackDetailResponse struct {
+	Success bool                    `json:"success" example:"true"`
+	Status  string                  `json:"status" example:"success"`
+	Data    TrackDetailResponseData `json:"data"`
+}
+
+type TrackDetailResponseData struct {
+	Track TrackResponse `json:"track"`
 }
 
 type TrackPaginationResponse struct {
@@ -64,6 +76,20 @@ type TrackErrorResponse struct {
 // @Router /tracks [get]
 func tracksDoc() {}
 
+// trackDoc godoc
+// @Summary Get track
+// @Description Returns one track owned by the authenticated user.
+// @Tags tracks
+// @Produce json
+// @Param trackID path string true "Track ID"
+// @Success 200 {object} TrackDetailResponse
+// @Failure 400 {object} TrackErrorResponse
+// @Failure 403 {object} TrackErrorResponse
+// @Failure 404 {object} TrackErrorResponse
+// @Failure 500 {object} TrackErrorResponse
+// @Router /tracks/{trackID} [get]
+func trackDoc() {}
+
 func (m *Module) handleListTracks(w http.ResponseWriter, r *http.Request) {
 	page, err := m.service.ListTracks(w, r)
 	if err != nil {
@@ -98,6 +124,38 @@ func (m *Module) handleListTracks(w http.ResponseWriter, r *http.Request) {
 				HasMore:    page.NextCursor != nil,
 				NextCursor: page.NextCursor,
 			},
+		},
+	})
+}
+
+func (m *Module) handleGetTrack(w http.ResponseWriter, r *http.Request) {
+	track, err := m.service.GetTrack(w, r, chi.URLParam(r, "trackID"))
+	if err != nil {
+		if errors.Is(err, ErrNotAuthenticated) {
+			writeTrackError(w, http.StatusForbidden, "authentication required")
+			return
+		}
+		if errors.Is(err, ErrTrackNotFound) {
+			writeTrackError(w, http.StatusNotFound, "track not found")
+			return
+		}
+		var requestErr *requestError
+		if errors.As(err, &requestErr) {
+			writeTrackError(w, http.StatusBadRequest, requestErr.Message)
+			return
+		}
+
+		writeTrackError(w, http.StatusInternalServerError, "failed to load track")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(TrackDetailResponse{
+		Success: true,
+		Status:  "success",
+		Data: TrackDetailResponseData{
+			Track: trackResponseFromTrack(track),
 		},
 	})
 }
