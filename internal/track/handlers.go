@@ -30,6 +30,16 @@ type TrackDetailResponseData struct {
 	Track TrackResponse `json:"track"`
 }
 
+type BatchDeleteTracksResponse struct {
+	Success bool                          `json:"success" example:"true"`
+	Status  string                        `json:"status" example:"success"`
+	Data    BatchDeleteTracksResponseData `json:"data"`
+}
+
+type BatchDeleteTracksResponseData struct {
+	Results []BatchDeleteTrackResult `json:"results"`
+}
+
 type TrackPaginationResponse struct {
 	Limit      int     `json:"limit" example:"20"`
 	HasMore    bool    `json:"hasMore" example:"false"`
@@ -89,6 +99,50 @@ func tracksDoc() {}
 // @Failure 500 {object} TrackErrorResponse
 // @Router /tracks/{trackID} [get]
 func trackDoc() {}
+
+// updateTrackDoc godoc
+// @Summary Update track
+// @Description Updates editable metadata for one track owned by the authenticated user.
+// @Tags tracks
+// @Accept json
+// @Produce json
+// @Param trackID path string true "Track ID"
+// @Param payload body UpdateTrackRequest true "Track update payload"
+// @Success 200 {object} TrackDetailResponse
+// @Failure 400 {object} TrackErrorResponse
+// @Failure 403 {object} TrackErrorResponse
+// @Failure 404 {object} TrackErrorResponse
+// @Failure 500 {object} TrackErrorResponse
+// @Router /tracks/{trackID} [patch]
+func updateTrackDoc() {}
+
+// deleteTrackDoc godoc
+// @Summary Delete track
+// @Description Soft-deletes one track owned by the authenticated user.
+// @Tags tracks
+// @Produce json
+// @Param trackID path string true "Track ID"
+// @Success 200 {object} TrackDetailResponse
+// @Failure 400 {object} TrackErrorResponse
+// @Failure 403 {object} TrackErrorResponse
+// @Failure 404 {object} TrackErrorResponse
+// @Failure 500 {object} TrackErrorResponse
+// @Router /tracks/{trackID} [delete]
+func deleteTrackDoc() {}
+
+// batchDeleteTracksDoc godoc
+// @Summary Batch delete tracks
+// @Description Soft-deletes several tracks owned by the authenticated user and returns per-item results.
+// @Tags tracks
+// @Accept json
+// @Produce json
+// @Param payload body BatchDeleteTracksRequest true "Batch delete payload"
+// @Success 200 {object} BatchDeleteTracksResponse
+// @Failure 400 {object} TrackErrorResponse
+// @Failure 403 {object} TrackErrorResponse
+// @Failure 500 {object} TrackErrorResponse
+// @Router /tracks/batch-delete [post]
+func batchDeleteTracksDoc() {}
 
 func (m *Module) handleListTracks(w http.ResponseWriter, r *http.Request) {
 	page, err := m.service.ListTracks(w, r)
@@ -156,6 +210,105 @@ func (m *Module) handleGetTrack(w http.ResponseWriter, r *http.Request) {
 		Status:  "success",
 		Data: TrackDetailResponseData{
 			Track: trackResponseFromTrack(track),
+		},
+	})
+}
+
+func (m *Module) handleUpdateTrack(w http.ResponseWriter, r *http.Request) {
+	input, err := decodeUpdateTrackRequest(r)
+	if err != nil {
+		writeTrackError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	track, err := m.service.UpdateTrack(w, r, chi.URLParam(r, "trackID"), input)
+	if err != nil {
+		if errors.Is(err, ErrNotAuthenticated) {
+			writeTrackError(w, http.StatusForbidden, "authentication required")
+			return
+		}
+		if errors.Is(err, ErrTrackNotFound) {
+			writeTrackError(w, http.StatusNotFound, "track not found")
+			return
+		}
+		var requestErr *requestError
+		if errors.As(err, &requestErr) {
+			writeTrackError(w, http.StatusBadRequest, requestErr.Message)
+			return
+		}
+
+		writeTrackError(w, http.StatusInternalServerError, "failed to update track")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(TrackDetailResponse{
+		Success: true,
+		Status:  "success",
+		Data: TrackDetailResponseData{
+			Track: trackResponseFromTrack(track),
+		},
+	})
+}
+
+func (m *Module) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
+	track, err := m.service.DeleteTrack(w, r, chi.URLParam(r, "trackID"))
+	if err != nil {
+		if errors.Is(err, ErrNotAuthenticated) {
+			writeTrackError(w, http.StatusForbidden, "authentication required")
+			return
+		}
+		if errors.Is(err, ErrTrackNotFound) {
+			writeTrackError(w, http.StatusNotFound, "track not found")
+			return
+		}
+		var requestErr *requestError
+		if errors.As(err, &requestErr) {
+			writeTrackError(w, http.StatusBadRequest, requestErr.Message)
+			return
+		}
+
+		writeTrackError(w, http.StatusInternalServerError, "failed to delete track")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(TrackDetailResponse{
+		Success: true,
+		Status:  "success",
+		Data: TrackDetailResponseData{
+			Track: trackResponseFromTrack(track),
+		},
+	})
+}
+
+func (m *Module) handleBatchDeleteTracks(w http.ResponseWriter, r *http.Request) {
+	input, err := decodeBatchDeleteTracksRequest(r)
+	if err != nil {
+		writeTrackError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	results, err := m.service.BatchDeleteTracks(w, r, input)
+	if err != nil {
+		if errors.Is(err, ErrNotAuthenticated) {
+			writeTrackError(w, http.StatusForbidden, "authentication required")
+			return
+		}
+
+		writeTrackError(w, http.StatusInternalServerError, "failed to delete tracks")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(BatchDeleteTracksResponse{
+		Success: true,
+		Status:  "success",
+		Data: BatchDeleteTracksResponseData{
+			Results: results,
 		},
 	})
 }

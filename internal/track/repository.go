@@ -302,6 +302,9 @@ type Repository interface {
 	EnsureSchema(ctx context.Context) error
 	ListByUserID(ctx context.Context, userID string, options ListTracksOptions) ([]Track, error)
 	GetByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error)
+	UpdateByIDForUser(ctx context.Context, userID string, trackID string, input UpdateTrackInput) (Track, bool, error)
+	SoftDeleteByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error)
+	BatchSoftDeleteByIDs(ctx context.Context, userID string, trackIDs []string) ([]string, error)
 }
 
 type PostgresRepository struct {
@@ -524,6 +527,159 @@ LIMIT 1
 	}
 
 	return track, true, nil
+}
+
+func (r *PostgresRepository) UpdateByIDForUser(ctx context.Context, userID string, trackID string, input UpdateTrackInput) (Track, bool, error) {
+	if r == nil || r.repo == nil {
+		return Track{}, false, fmt.Errorf("track repository is not configured")
+	}
+
+	userID = strings.TrimSpace(userID)
+	trackID = strings.TrimSpace(trackID)
+	if userID == "" || trackID == "" || input.Empty() {
+		return Track{}, false, nil
+	}
+
+	set := []string{}
+	args := []any{userID, trackID}
+	addSet := func(column string, value any) {
+		args = append(args, value)
+		set = append(set, fmt.Sprintf("%s = $%d", sqlIdentifier(column), len(args)))
+	}
+
+	if input.Title != nil {
+		addSet("title", *input.Title)
+	}
+	if input.Artist != nil {
+		addSet("artist", *input.Artist)
+	}
+	if input.Album != nil {
+		addSet("album", *input.Album)
+	}
+	if input.Genre != nil {
+		addSet("genre", *input.Genre)
+	}
+	if input.ReleaseYear != nil {
+		addSet("releaseYear", *input.ReleaseYear)
+	}
+	if input.TrackNumber != nil {
+		addSet("trackNumber", *input.TrackNumber)
+	}
+	if input.DiscNumber != nil {
+		addSet("discNumber", *input.DiscNumber)
+	}
+	if input.DurationMs != nil {
+		addSet("durationMs", *input.DurationMs)
+	}
+	if input.Explicit != nil {
+		addSet("explicit", *input.Explicit)
+	}
+	if input.Visibility != nil {
+		args = append(args, string(*input.Visibility))
+		set = append(set, fmt.Sprintf("visibility = $%d::track_visibility", len(args)))
+	}
+	if input.Metadata != nil {
+		rawMetadata, err := json.Marshal(*input.Metadata)
+		if err != nil {
+			return Track{}, false, err
+		}
+		args = append(args, string(rawMetadata))
+		set = append(set, fmt.Sprintf("metadata = $%d::jsonb", len(args)))
+	}
+
+	set = append(set, `"updatedAt" = NOW()`)
+	query := fmt.Sprintf(`
+UPDATE "track"
+SET %s
+WHERE "userId" = $1 AND id = $2 AND status <> 'deleted'::track_status
+RETURNING %s
+`, strings.Join(set, ", "), trackSelectColumns)
+
+	track, err := scanTrack(r.repo.QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Track{}, false, nil
+	}
+	if err != nil {
+		return Track{}, false, err
+	}
+
+	return track, true, nil
+}
+
+func (r *PostgresRepository) SoftDeleteByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error) {
+	if r == nil || r.repo == nil {
+		return Track{}, false, fmt.Errorf("track repository is not configured")
+	}
+
+	userID = strings.TrimSpace(userID)
+	trackID = strings.TrimSpace(trackID)
+	if userID == "" || trackID == "" {
+		return Track{}, false, nil
+	}
+
+	query := fmt.Sprintf(`
+UPDATE "track"
+SET status = 'deleted'::track_status, "updatedAt" = NOW()
+WHERE "userId" = $1 AND id = $2 AND status <> 'deleted'::track_status
+RETURNING %s
+`, trackSelectColumns)
+
+	track, err := scanTrack(r.repo.QueryRow(ctx, query, userID, trackID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Track{}, false, nil
+	}
+	if err != nil {
+		return Track{}, false, err
+	}
+
+	return track, true, nil
+}
+
+func (r *PostgresRepository) BatchSoftDeleteByIDs(ctx context.Context, userID string, trackIDs []string) ([]string, error) {
+	if r == nil || r.repo == nil {
+		return nil, fmt.Errorf("track repository is not configured")
+	}
+
+	userID = strings.TrimSpace(userID)
+	trackIDs = uniqueValidTrackIDs(trackIDs)
+	if userID == "" || len(trackIDs) == 0 {
+		return []string{}, nil
+	}
+
+	args := []any{userID}
+	placeholders := make([]string, 0, len(trackIDs))
+	for _, trackID := range trackIDs {
+		args = append(args, trackID)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+	}
+
+	query := fmt.Sprintf(`
+UPDATE "track"
+SET status = 'deleted'::track_status, "updatedAt" = NOW()
+WHERE "userId" = $1 AND id IN (%s) AND status <> 'deleted'::track_status
+RETURNING id
+`, strings.Join(placeholders, ", "))
+
+	rows, err := r.repo.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	deletedIDs := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		deletedIDs = append(deletedIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return deletedIDs, nil
 }
 
 type trackScanner interface {

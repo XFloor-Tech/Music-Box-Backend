@@ -1,11 +1,13 @@
 package track
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -584,6 +586,281 @@ func TestHandleGetTrackReturnsNotFoundWhenTrackIsMissing(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateTrackUpdatesAuthenticatedUserTrack(t *testing.T) {
+	artist := "Updated Artist"
+	releaseYear := 2026
+	explicit := true
+	createdAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	updatedAt := createdAt.Add(time.Hour)
+	repo := &stubTrackRepository{
+		updatedTrack: Track{
+			ID:          "trk_123",
+			UserID:      "usr_123",
+			Title:       "Updated Song",
+			Artist:      &artist,
+			ReleaseYear: &releaseYear,
+			Explicit:    explicit,
+			Visibility:  VisibilityPublic,
+			Status:      StatusReady,
+			Metadata: map[string]any{
+				"mood": "bright",
+			},
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		},
+		updateExists: true,
+	}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	body := []byte(`{"title":" Updated Song ","artist":" Updated Artist ","releaseYear":2026,"explicit":true,"visibility":"public","metadata":{"mood":"bright"}}`)
+	req := httptest.NewRequest(http.MethodPatch, "/tracks/trk_123", bytes.NewReader(body))
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if len(repo.updatedTrackUserIDs) != 1 || repo.updatedTrackUserIDs[0] != "usr_123" {
+		t.Fatalf("updated user ids = %#v, want usr_123", repo.updatedTrackUserIDs)
+	}
+	if len(repo.updatedTrackIDs) != 1 || repo.updatedTrackIDs[0] != "trk_123" {
+		t.Fatalf("updated track ids = %#v, want trk_123", repo.updatedTrackIDs)
+	}
+	if len(repo.updateInputs) != 1 {
+		t.Fatalf("update inputs len = %d, want 1", len(repo.updateInputs))
+	}
+	input := repo.updateInputs[0]
+	if input.Title == nil || *input.Title != "Updated Song" {
+		t.Fatalf("title input = %#v, want Updated Song", input.Title)
+	}
+	if input.Artist == nil || *input.Artist != "Updated Artist" {
+		t.Fatalf("artist input = %#v, want Updated Artist", input.Artist)
+	}
+	if input.ReleaseYear == nil || *input.ReleaseYear != 2026 {
+		t.Fatalf("releaseYear input = %#v, want 2026", input.ReleaseYear)
+	}
+	if input.Explicit == nil || !*input.Explicit {
+		t.Fatalf("explicit input = %#v, want true", input.Explicit)
+	}
+	if input.Visibility == nil || *input.Visibility != VisibilityPublic {
+		t.Fatalf("visibility input = %#v, want public", input.Visibility)
+	}
+	if input.Metadata == nil || (*input.Metadata)["mood"] != "bright" {
+		t.Fatalf("metadata input = %#v, want mood bright", input.Metadata)
+	}
+
+	var response TrackDetailResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !response.Success {
+		t.Fatal("success = false, want true")
+	}
+	if response.Data.Track.ID != "trk_123" {
+		t.Fatalf("track id = %q, want trk_123", response.Data.Track.ID)
+	}
+	if response.Data.Track.Artist == nil || *response.Data.Track.Artist != "Updated Artist" {
+		t.Fatalf("artist = %#v, want Updated Artist", response.Data.Track.Artist)
+	}
+	if response.Data.Track.Metadata["mood"] != "bright" {
+		t.Fatalf("metadata mood = %v, want bright", response.Data.Track.Metadata["mood"])
+	}
+}
+
+func TestHandleUpdateTrackReturnsBadRequestForInvalidPayload(t *testing.T) {
+	repo := &stubTrackRepository{}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tracks/trk_123", strings.NewReader(`{"title":"   "}`))
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if len(repo.updatedTrackIDs) != 0 {
+		t.Fatalf("updated track ids = %#v, want none", repo.updatedTrackIDs)
+	}
+}
+
+func TestHandleUpdateTrackReturnsNotFoundWhenTrackIsMissing(t *testing.T) {
+	repo := &stubTrackRepository{}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodPatch, "/tracks/trk_missing", strings.NewReader(`{"title":"Song"}`))
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleDeleteTrackSoftDeletesAuthenticatedUserTrack(t *testing.T) {
+	createdAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	repo := &stubTrackRepository{
+		deletedTrack: Track{
+			ID:         "trk_123",
+			UserID:     "usr_123",
+			Title:      "Deleted Song",
+			Visibility: VisibilityPrivate,
+			Status:     StatusDeleted,
+			Metadata:   map[string]any{},
+			CreatedAt:  createdAt,
+			UpdatedAt:  createdAt.Add(time.Hour),
+		},
+		deleteExists: true,
+	}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodDelete, "/tracks/trk_123", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if len(repo.deletedTrackUserIDs) != 1 || repo.deletedTrackUserIDs[0] != "usr_123" {
+		t.Fatalf("deleted user ids = %#v, want usr_123", repo.deletedTrackUserIDs)
+	}
+	if len(repo.deletedTrackIDs) != 1 || repo.deletedTrackIDs[0] != "trk_123" {
+		t.Fatalf("deleted track ids = %#v, want trk_123", repo.deletedTrackIDs)
+	}
+
+	var response TrackDetailResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !response.Success {
+		t.Fatal("success = false, want true")
+	}
+	if response.Data.Track.Status != StatusDeleted {
+		t.Fatalf("status = %q, want deleted", response.Data.Track.Status)
+	}
+}
+
+func TestHandleDeleteTrackReturnsNotFoundWhenTrackIsMissing(t *testing.T) {
+	repo := &stubTrackRepository{}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodDelete, "/tracks/trk_missing", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleBatchDeleteTracksReturnsPerItemResults(t *testing.T) {
+	repo := &stubTrackRepository{
+		batchDeletedTrackIDsResult: []string{"trk_1"},
+	}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodPost, "/tracks/batch-delete", strings.NewReader(`{"trackIds":["trk_1","trk_missing","   "]}`))
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if len(repo.batchDeletedTrackUserIDs) != 1 || repo.batchDeletedTrackUserIDs[0] != "usr_123" {
+		t.Fatalf("batch deleted user ids = %#v, want usr_123", repo.batchDeletedTrackUserIDs)
+	}
+	if len(repo.batchDeletedTrackIDs) != 1 {
+		t.Fatalf("batch deleted calls = %d, want 1", len(repo.batchDeletedTrackIDs))
+	}
+	if got := repo.batchDeletedTrackIDs[0]; len(got) != 2 || got[0] != "trk_1" || got[1] != "trk_missing" {
+		t.Fatalf("batch deleted ids = %#v, want trk_1 and trk_missing", got)
+	}
+
+	var response BatchDeleteTracksResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !response.Success {
+		t.Fatal("success = false, want true")
+	}
+	if len(response.Data.Results) != 3 {
+		t.Fatalf("results len = %d, want 3", len(response.Data.Results))
+	}
+	if !response.Data.Results[0].Success || response.Data.Results[0].TrackID != "trk_1" {
+		t.Fatalf("result[0] = %#v, want success for trk_1", response.Data.Results[0])
+	}
+	if response.Data.Results[1].Success || response.Data.Results[1].Error != "track not found" {
+		t.Fatalf("result[1] = %#v, want not found", response.Data.Results[1])
+	}
+	if response.Data.Results[2].Success || response.Data.Results[2].Error != "trackId is required" {
+		t.Fatalf("result[2] = %#v, want required error", response.Data.Results[2])
+	}
+}
+
+func TestHandleBatchDeleteTracksReturnsBadRequestForEmptyList(t *testing.T) {
+	repo := &stubTrackRepository{}
+	module := &Module{
+		service: NewService(repo, stubAuthenticator{
+			user: &authmodule.User{ID: "usr_123"},
+		}),
+	}
+	router := chi.NewRouter()
+	module.RegisterRoutes(router)
+
+	req := httptest.NewRequest(http.MethodPost, "/tracks/batch-delete", strings.NewReader(`{"trackIds":[]}`))
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if len(repo.batchDeletedTrackIDs) != 0 {
+		t.Fatalf("batch deleted ids = %#v, want none", repo.batchDeletedTrackIDs)
+	}
+}
+
 type stubAuthenticator struct {
 	user *authmodule.User
 	req  *http.Request
@@ -599,14 +876,26 @@ func (a stubAuthenticator) LoadAuthenticatedUser(w http.ResponseWriter, r *http.
 }
 
 type stubTrackRepository struct {
-	tracks          []Track
-	track           Track
-	trackExists     bool
-	err             error
-	listedUserIDs   []string
-	listedOptions   []ListTracksOptions
-	gotTrackUserIDs []string
-	gotTrackIDs     []string
+	tracks                     []Track
+	track                      Track
+	trackExists                bool
+	updatedTrack               Track
+	updateExists               bool
+	deletedTrack               Track
+	deleteExists               bool
+	batchDeletedTrackIDsResult []string
+	err                        error
+	listedUserIDs              []string
+	listedOptions              []ListTracksOptions
+	gotTrackUserIDs            []string
+	gotTrackIDs                []string
+	updatedTrackUserIDs        []string
+	updatedTrackIDs            []string
+	updateInputs               []UpdateTrackInput
+	deletedTrackUserIDs        []string
+	deletedTrackIDs            []string
+	batchDeletedTrackUserIDs   []string
+	batchDeletedTrackIDs       [][]string
 }
 
 func (r *stubTrackRepository) EnsureSchema(ctx context.Context) error {
@@ -623,4 +912,23 @@ func (r *stubTrackRepository) GetByIDForUser(ctx context.Context, userID string,
 	r.gotTrackUserIDs = append(r.gotTrackUserIDs, userID)
 	r.gotTrackIDs = append(r.gotTrackIDs, trackID)
 	return r.track, r.trackExists, r.err
+}
+
+func (r *stubTrackRepository) UpdateByIDForUser(ctx context.Context, userID string, trackID string, input UpdateTrackInput) (Track, bool, error) {
+	r.updatedTrackUserIDs = append(r.updatedTrackUserIDs, userID)
+	r.updatedTrackIDs = append(r.updatedTrackIDs, trackID)
+	r.updateInputs = append(r.updateInputs, input)
+	return r.updatedTrack, r.updateExists, r.err
+}
+
+func (r *stubTrackRepository) SoftDeleteByIDForUser(ctx context.Context, userID string, trackID string) (Track, bool, error) {
+	r.deletedTrackUserIDs = append(r.deletedTrackUserIDs, userID)
+	r.deletedTrackIDs = append(r.deletedTrackIDs, trackID)
+	return r.deletedTrack, r.deleteExists, r.err
+}
+
+func (r *stubTrackRepository) BatchSoftDeleteByIDs(ctx context.Context, userID string, trackIDs []string) ([]string, error) {
+	r.batchDeletedTrackUserIDs = append(r.batchDeletedTrackUserIDs, userID)
+	r.batchDeletedTrackIDs = append(r.batchDeletedTrackIDs, append([]string(nil), trackIDs...))
+	return r.batchDeletedTrackIDsResult, r.err
 }

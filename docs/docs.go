@@ -307,6 +307,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/tracks/batch-delete": {
+            "post": {
+                "description": "Soft-deletes several tracks owned by the authenticated user and returns per-item results.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tracks"
+                ],
+                "summary": "Batch delete tracks",
+                "parameters": [
+                    {
+                        "description": "Batch delete payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/track.BatchDeleteTracksRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/track.BatchDeleteTracksResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tracks/{trackID}": {
             "get": {
                 "description": "Returns one track owned by the authenticated user.",
@@ -324,6 +376,120 @@ const docTemplate = `{
                         "name": "trackID",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Soft-deletes one track owned by the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tracks"
+                ],
+                "summary": "Delete track",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Track ID",
+                        "name": "trackID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/track.TrackErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Updates editable metadata for one track owned by the authenticated user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tracks"
+                ],
+                "summary": "Update track",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Track ID",
+                        "name": "trackID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Track update payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/track.UpdateTrackRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -521,6 +687,68 @@ const docTemplate = `{
                 }
             }
         },
+        "track.BatchDeleteTrackResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "track not found"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "trackId": {
+                    "type": "string"
+                }
+            }
+        },
+        "track.BatchDeleteTracksRequest": {
+            "type": "object",
+            "properties": {
+                "trackIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "trk_123",
+                        "trk_456"
+                    ]
+                }
+            }
+        },
+        "track.BatchDeleteTracksResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/track.BatchDeleteTracksResponseData"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "track.BatchDeleteTracksResponseData": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/track.BatchDeleteTrackResult"
+                    }
+                }
+            }
+        },
         "track.Status": {
             "type": "string",
             "enum": [
@@ -696,6 +924,59 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/track.TrackResponse"
                     }
+                }
+            }
+        },
+        "track.UpdateTrackRequest": {
+            "type": "object",
+            "properties": {
+                "album": {
+                    "type": "string",
+                    "example": "Album title"
+                },
+                "artist": {
+                    "type": "string",
+                    "example": "Artist name"
+                },
+                "discNumber": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "durationMs": {
+                    "type": "integer",
+                    "example": 180000
+                },
+                "explicit": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "genre": {
+                    "type": "string",
+                    "example": "electronic"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "releaseYear": {
+                    "type": "integer",
+                    "example": 2026
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Song title"
+                },
+                "trackNumber": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "visibility": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/track.Visibility"
+                        }
+                    ],
+                    "example": "private"
                 }
             }
         },

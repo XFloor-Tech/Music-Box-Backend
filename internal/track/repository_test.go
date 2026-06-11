@@ -78,6 +78,58 @@ func TestTrackQueriesUseCamelCaseDatabaseColumns(t *testing.T) {
 	}
 }
 
+func TestTrackMutationQueriesUseCamelCaseDatabaseColumns(t *testing.T) {
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+	title := "Song"
+	visibility := VisibilityPublic
+
+	_, _, _ = tracks.UpdateByIDForUser(context.Background(), "usr_123", "trk_123", UpdateTrackInput{
+		Title:      &title,
+		Visibility: &visibility,
+	})
+
+	updateQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`"title" = $3`,
+		`visibility = $4::track_visibility`,
+		`"updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`status <> 'deleted'::track_status`,
+	} {
+		if !strings.Contains(updateQuery, fragment) {
+			t.Fatalf("update query does not contain %s:\n%s", fragment, updateQuery)
+		}
+	}
+
+	_, _, _ = tracks.SoftDeleteByIDForUser(context.Background(), "usr_123", "trk_123")
+
+	deleteQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`SET status = 'deleted'::track_status, "updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`status <> 'deleted'::track_status`,
+	} {
+		if !strings.Contains(deleteQuery, fragment) {
+			t.Fatalf("delete query does not contain %s:\n%s", fragment, deleteQuery)
+		}
+	}
+
+	_, _ = tracks.BatchSoftDeleteByIDs(context.Background(), "usr_123", []string{"trk_1", "trk_2"})
+
+	batchDeleteQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`SET status = 'deleted'::track_status, "updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`id IN ($2, $3)`,
+		`RETURNING id`,
+	} {
+		if !strings.Contains(batchDeleteQuery, fragment) {
+			t.Fatalf("batch delete query does not contain %s:\n%s", fragment, batchDeleteQuery)
+		}
+	}
+}
+
 func indexOfStatement(statements []string, needle string) int {
 	for i, statement := range statements {
 		if strings.Contains(statement, needle) {
@@ -104,8 +156,13 @@ func (r *recordingRepository) Query(ctx context.Context, query string, args ...a
 }
 
 func (r *recordingRepository) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
-	return nil
+	r.lastQuery = query
+	return noRowsRow{}
 }
+
+type noRowsRow struct{}
+
+func (noRowsRow) Scan(dest ...any) error { return pgx.ErrNoRows }
 
 type emptyRows struct{}
 

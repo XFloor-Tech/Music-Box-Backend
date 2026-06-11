@@ -5,10 +5,10 @@
 - [x] `GET /tracks` lists the authenticated user's tracks.
 - [x] `GET /tracks/{trackID}` returns one track owned by the authenticated user.
 - [ ] `POST /tracks` creates a single upload intent for one track.
-- [ ] `PATCH /tracks/{trackID}` edits track metadata.
-- [ ] `DELETE /tracks/{trackID}` soft-deletes one track.
+- [x] `PATCH /tracks/{trackID}` edits track metadata.
+- [x] `DELETE /tracks/{trackID}` soft-deletes one track.
 - [ ] `POST /tracks/batch` creates upload intents for several tracks at once.
-- [ ] `POST /tracks/batch-delete` soft-deletes several tracks at once.
+- [x] `POST /tracks/batch-delete` soft-deletes several tracks at once.
 - [ ] `POST /tracks/{trackID}/media/{mediaID}/complete` marks an uploaded original as complete and prepares processing.
 
 ## Internal Architecture
@@ -23,6 +23,7 @@
 ## Endpoint Details
 
 - [x] Add pagination and filters to `GET /tracks` (`limit`, `cursor`, `status`, `visibility`).
-- [ ] Return per-item success/error payloads for batch create and batch delete.
-- [ ] Keep track edits metadata-only; media/storage fields should move through upload and processing flows.
+- [ ] Return per-item success/error payloads for batch create.
+- [x] Return per-item success/error payloads for batch delete.
+- [x] Keep track edits metadata-only; media/storage fields should move through upload and processing flows.
 - [x] Update Swagger annotations and regenerate docs whenever public track APIs change.

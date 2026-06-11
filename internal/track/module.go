@@ -37,5 +37,8 @@ func (m *Module) RegisterRoutes(r chi.Router) {
 	}
 
 	r.Get("/tracks", m.handleListTracks)
+	r.Post("/tracks/batch-delete", m.handleBatchDeleteTracks)
 	r.Get("/tracks/{trackID}", m.handleGetTrack)
+	r.Patch("/tracks/{trackID}", m.handleUpdateTrack)
+	r.Delete("/tracks/{trackID}", m.handleDeleteTrack)
 }

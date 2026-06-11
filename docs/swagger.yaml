@@ -111,6 +111,48 @@ definitions:
         example: music-player
         type: string
     type: object
+  track.BatchDeleteTrackResult:
+    properties:
+      error:
+        example: track not found
+        type: string
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+      trackId:
+        type: string
+    type: object
+  track.BatchDeleteTracksRequest:
+    properties:
+      trackIds:
+        example:
+        - trk_123
+        - trk_456
+        items:
+          type: string
+        type: array
+    type: object
+  track.BatchDeleteTracksResponse:
+    properties:
+      data:
+        $ref: '#/definitions/track.BatchDeleteTracksResponseData'
+      status:
+        example: success
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  track.BatchDeleteTracksResponseData:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/track.BatchDeleteTrackResult'
+        type: array
+    type: object
   track.Status:
     enum:
     - draft
@@ -234,6 +276,43 @@ definitions:
         items:
           $ref: '#/definitions/track.TrackResponse'
         type: array
+    type: object
+  track.UpdateTrackRequest:
+    properties:
+      album:
+        example: Album title
+        type: string
+      artist:
+        example: Artist name
+        type: string
+      discNumber:
+        example: 1
+        type: integer
+      durationMs:
+        example: 180000
+        type: integer
+      explicit:
+        example: false
+        type: boolean
+      genre:
+        example: electronic
+        type: string
+      metadata:
+        additionalProperties: {}
+        type: object
+      releaseYear:
+        example: 2026
+        type: integer
+      title:
+        example: Song title
+        type: string
+      trackNumber:
+        example: 1
+        type: integer
+      visibility:
+        allOf:
+        - $ref: '#/definitions/track.Visibility'
+        example: private
     type: object
   track.Visibility:
     enum:
@@ -503,6 +582,40 @@ paths:
       tags:
       - tracks
   /tracks/{trackID}:
+    delete:
+      description: Soft-deletes one track owned by the authenticated user.
+      parameters:
+      - description: Track ID
+        in: path
+        name: trackID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/track.TrackDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+      summary: Delete track
+      tags:
+      - tracks
     get:
       description: Returns one track owned by the authenticated user.
       parameters:
@@ -535,6 +648,84 @@ paths:
           schema:
             $ref: '#/definitions/track.TrackErrorResponse'
       summary: Get track
+      tags:
+      - tracks
+    patch:
+      consumes:
+      - application/json
+      description: Updates editable metadata for one track owned by the authenticated
+        user.
+      parameters:
+      - description: Track ID
+        in: path
+        name: trackID
+        required: true
+        type: string
+      - description: Track update payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/track.UpdateTrackRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/track.TrackDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+      summary: Update track
+      tags:
+      - tracks
+  /tracks/batch-delete:
+    post:
+      consumes:
+      - application/json
+      description: Soft-deletes several tracks owned by the authenticated user and
+        returns per-item results.
+      parameters:
+      - description: Batch delete payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/track.BatchDeleteTracksRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/track.BatchDeleteTracksResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/track.TrackErrorResponse'
+      summary: Batch delete tracks
       tags:
       - tracks
 schemes:
