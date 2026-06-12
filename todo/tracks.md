@@ -3,9 +3,9 @@
 ## problems
 
 - [x] Unauthenticated track requests return `403 Forbidden` instead of `401 Unauthorized`. This is inconsistent with `/me`, can prevent clients from triggering the login flow correctly, and is currently baked into track handler tests.
-- [ ] Track IDs are only trimmed, not validated or length-limited, before being passed to repository methods. Add a small shared validator for path IDs and `trackIds` batch entries so malformed or very large IDs are rejected before database work.
-- [ ] Runtime schema repair creates missing tables/columns but does not add missing table constraints to an already-existing `track` or `track_media` table. A legacy or partially-created table can keep accepting invalid metadata, negative durations, invalid checksum shapes, or empty titles even though `schema.sql` declares those constraints.
-- [ ] Nullable string metadata fields such as `artist`, `album`, and `genre` are trimmed but blank values are persisted as empty strings instead of `NULL`. Decide whether blank strings should clear the field to `NULL` and update the mutation path accordingly.
+- [x] Track IDs are only trimmed, not validated or length-limited, before being passed to repository methods. Add validator-tagged path params and `trackIds` request validation so blank or very large IDs are rejected before database work.
+- [x] Runtime schema repair creates missing tables/columns but does not add missing table constraints to an already-existing `track` or `track_media` table. A legacy or partially-created table can keep accepting invalid metadata, negative durations, invalid checksum shapes, or empty titles even though `schema.sql` declares those constraints.
+- [x] Nullable string metadata fields such as `artist`, `album`, and `genre` are trimmed but blank values are persisted as empty strings instead of `NULL`. Blank values now clear those fields to `NULL`.
 
 ## API Surface
 

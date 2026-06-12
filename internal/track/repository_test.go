@@ -21,23 +21,36 @@ func TestEnsureSchemaRepairsLegacyTrackColumnsBeforeIndexes(t *testing.T) {
 	trackTableIndex := indexOfStatement(repo.statements, `CREATE TABLE IF NOT EXISTS "track"`)
 	trackRenameIndex := indexOfStatement(repo.statements, `RENAME COLUMN "release_year" TO "releaseYear"`)
 	trackAddIndex := indexOfStatement(repo.statements, `ADD COLUMN IF NOT EXISTS "releaseYear" INTEGER`)
+	trackConstraintIndex := indexOfStatement(repo.statements, `ADD CONSTRAINT "track_release_year_valid"`)
 	trackIndexIndex := indexOfStatement(repo.statements, `track_user_created_at_id_idx`)
-	if trackTableIndex == -1 || trackRenameIndex == -1 || trackAddIndex == -1 || trackIndexIndex == -1 {
-		t.Fatalf("track schema statements missing: table=%d rename=%d add=%d index=%d", trackTableIndex, trackRenameIndex, trackAddIndex, trackIndexIndex)
+	if trackTableIndex == -1 || trackRenameIndex == -1 || trackAddIndex == -1 || trackConstraintIndex == -1 || trackIndexIndex == -1 {
+		t.Fatalf("track schema statements missing: table=%d rename=%d add=%d constraint=%d index=%d", trackTableIndex, trackRenameIndex, trackAddIndex, trackConstraintIndex, trackIndexIndex)
 	}
-	if !(trackTableIndex < trackRenameIndex && trackRenameIndex < trackAddIndex && trackAddIndex < trackIndexIndex) {
-		t.Fatalf("track schema order = table:%d rename:%d add:%d index:%d, want table < rename < add < index", trackTableIndex, trackRenameIndex, trackAddIndex, trackIndexIndex)
+	if !(trackTableIndex < trackRenameIndex && trackRenameIndex < trackAddIndex && trackAddIndex < trackConstraintIndex && trackConstraintIndex < trackIndexIndex) {
+		t.Fatalf("track schema order = table:%d rename:%d add:%d constraint:%d index:%d, want table < rename < add < constraint < index", trackTableIndex, trackRenameIndex, trackAddIndex, trackConstraintIndex, trackIndexIndex)
 	}
 
 	mediaTableIndex := indexOfStatement(repo.statements, `CREATE TABLE IF NOT EXISTS track_media`)
 	mediaRenameIndex := indexOfStatement(repo.statements, `RENAME COLUMN "track_id" TO "trackId"`)
 	mediaAddIndex := indexOfStatement(repo.statements, `ADD COLUMN IF NOT EXISTS "storageProvider" track_storage_provider`)
+	mediaConstraintIndex := indexOfStatement(repo.statements, `ADD CONSTRAINT "track_media_checksum_sha256_hex"`)
 	mediaIndexIndex := indexOfStatement(repo.statements, `track_media_track_id_idx`)
-	if mediaTableIndex == -1 || mediaRenameIndex == -1 || mediaAddIndex == -1 || mediaIndexIndex == -1 {
-		t.Fatalf("track media schema statements missing: table=%d rename=%d add=%d index=%d", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaIndexIndex)
+	if mediaTableIndex == -1 || mediaRenameIndex == -1 || mediaAddIndex == -1 || mediaConstraintIndex == -1 || mediaIndexIndex == -1 {
+		t.Fatalf("track media schema statements missing: table=%d rename=%d add=%d constraint=%d index=%d", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaConstraintIndex, mediaIndexIndex)
 	}
-	if !(mediaTableIndex < mediaRenameIndex && mediaRenameIndex < mediaAddIndex && mediaAddIndex < mediaIndexIndex) {
-		t.Fatalf("track media schema order = table:%d rename:%d add:%d index:%d, want table < rename < add < index", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaIndexIndex)
+	if !(mediaTableIndex < mediaRenameIndex && mediaRenameIndex < mediaAddIndex && mediaAddIndex < mediaConstraintIndex && mediaConstraintIndex < mediaIndexIndex) {
+		t.Fatalf("track media schema order = table:%d rename:%d add:%d constraint:%d index:%d, want table < rename < add < constraint < index", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaConstraintIndex, mediaIndexIndex)
+	}
+
+	for _, fragment := range []string{
+		`ADD CONSTRAINT "track_title_not_empty"`,
+		`ADD CONSTRAINT "track_metadata_object"`,
+		`ADD CONSTRAINT "track_media_metadata_object"`,
+		`NOT VALID`,
+	} {
+		if indexOfStatement(repo.statements, fragment) == -1 {
+			t.Fatalf("schema statements do not contain %s", fragment)
+		}
 	}
 }
 
@@ -130,6 +143,27 @@ func TestTrackMutationQueriesUseCamelCaseDatabaseColumns(t *testing.T) {
 	}
 }
 
+func TestTrackMutationStoresBlankNullableStringsAsNull(t *testing.T) {
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+	blank := ""
+
+	_, _, _ = tracks.UpdateByIDForUser(context.Background(), "usr_123", "trk_123", UpdateTrackInput{
+		Artist: &blank,
+		Album:  &blank,
+		Genre:  &blank,
+	})
+
+	if len(repo.lastArgs) < 5 {
+		t.Fatalf("last args len = %d, want at least 5", len(repo.lastArgs))
+	}
+	for i, arg := range repo.lastArgs[2:5] {
+		if arg != nil {
+			t.Fatalf("nullable string arg %d = %#v, want nil", i, arg)
+		}
+	}
+}
+
 func indexOfStatement(statements []string, needle string) int {
 	for i, statement := range statements {
 		if strings.Contains(statement, needle) {
@@ -143,6 +177,7 @@ func indexOfStatement(statements []string, needle string) int {
 type recordingRepository struct {
 	statements []string
 	lastQuery  string
+	lastArgs   []any
 }
 
 func (r *recordingRepository) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
@@ -152,11 +187,13 @@ func (r *recordingRepository) Exec(ctx context.Context, query string, args ...an
 
 func (r *recordingRepository) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	r.lastQuery = query
+	r.lastArgs = append([]any(nil), args...)
 	return emptyRows{}, nil
 }
 
 func (r *recordingRepository) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
 	r.lastQuery = query
+	r.lastArgs = append([]any(nil), args...)
 	return noRowsRow{}
 }
 

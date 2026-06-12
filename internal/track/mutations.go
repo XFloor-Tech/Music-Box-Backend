@@ -54,7 +54,7 @@ func (input UpdateTrackInput) Empty() bool {
 }
 
 type BatchDeleteTracksRequest struct {
-	TrackIDs []string `json:"trackIds" example:"trk_123,trk_456"`
+	TrackIDs []string `json:"trackIds" validate:"required,min=1,max=100,dive,required,max=128" example:"trk_123,trk_456"`
 }
 
 type BatchDeleteTracksInput struct {

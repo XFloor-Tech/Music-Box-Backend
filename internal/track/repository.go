@@ -151,6 +151,11 @@ type columnDefinition struct {
 	definition string
 }
 
+type constraintDefinition struct {
+	name       string
+	definition string
+}
+
 var legacyTrackColumnRenames = []legacyColumnRename{
 	{current: "userId", legacy: []string{"user_id", "userid"}},
 	{current: "releaseYear", legacy: []string{"release_year", "releaseyear"}},
@@ -175,6 +180,15 @@ var trackColumnDefinitions = []columnDefinition{
 	{name: "metadata", definition: "JSONB NOT NULL DEFAULT '{}'::jsonb"},
 	{name: "createdAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
 	{name: "updatedAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+}
+
+var trackConstraintDefinitions = []constraintDefinition{
+	{name: "track_title_not_empty", definition: "CHECK (btrim(title) <> '')"},
+	{name: "track_release_year_valid", definition: `CHECK ("releaseYear" IS NULL OR ("releaseYear" >= 0 AND "releaseYear" <= 9999))`},
+	{name: "track_track_number_positive", definition: `CHECK ("trackNumber" IS NULL OR "trackNumber" > 0)`},
+	{name: "track_disc_number_positive", definition: `CHECK ("discNumber" IS NULL OR "discNumber" > 0)`},
+	{name: "track_duration_ms_non_negative", definition: `CHECK ("durationMs" IS NULL OR "durationMs" >= 0)`},
+	{name: "track_metadata_object", definition: "CHECK (jsonb_typeof(metadata) = 'object')"},
 }
 
 var legacyTrackMediaColumnRenames = []legacyColumnRename{
@@ -214,6 +228,16 @@ var trackMediaColumnDefinitions = []columnDefinition{
 	{name: "metadata", definition: "JSONB NOT NULL DEFAULT '{}'::jsonb"},
 	{name: "createdAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
 	{name: "updatedAt", definition: "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+}
+
+var trackMediaConstraintDefinitions = []constraintDefinition{
+	{name: "track_media_size_bytes_non_negative", definition: `CHECK ("sizeBytes" IS NULL OR "sizeBytes" >= 0)`},
+	{name: "track_media_bitrate_bps_positive", definition: `CHECK ("bitrateBps" IS NULL OR "bitrateBps" > 0)`},
+	{name: "track_media_sample_rate_hz_positive", definition: `CHECK ("sampleRateHz" IS NULL OR "sampleRateHz" > 0)`},
+	{name: "track_media_channel_count_positive", definition: `CHECK ("channelCount" IS NULL OR "channelCount" > 0)`},
+	{name: "track_media_duration_ms_non_negative", definition: `CHECK ("durationMs" IS NULL OR "durationMs" >= 0)`},
+	{name: "track_media_checksum_sha256_hex", definition: `CHECK ("checksumSha256" IS NULL OR "checksumSha256" ~ '^[a-fA-F0-9]{64}$')`},
+	{name: "track_media_metadata_object", definition: "CHECK (jsonb_typeof(metadata) = 'object')"},
 }
 
 type Visibility string
@@ -335,6 +359,7 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 	}
 	statements = append(statements, legacyColumnRenameStatements("track", legacyTrackColumnRenames)...)
 	statements = append(statements, addColumnIfMissingStatements("track", trackColumnDefinitions)...)
+	statements = append(statements, addConstraintIfMissingStatements("track", trackConstraintDefinitions)...)
 	statements = append(statements,
 		createTrackUserIndexSQL,
 		createTrackUserCreatedIndexSQL,
@@ -344,6 +369,7 @@ func (r *PostgresRepository) EnsureSchema(ctx context.Context) error {
 	)
 	statements = append(statements, legacyColumnRenameStatements("track_media", legacyTrackMediaColumnRenames)...)
 	statements = append(statements, addColumnIfMissingStatements("track_media", trackMediaColumnDefinitions)...)
+	statements = append(statements, addConstraintIfMissingStatements("track_media", trackMediaConstraintDefinitions)...)
 	statements = append(statements,
 		createTrackMediaTrackIndexSQL,
 		createTrackMediaStatusIndexSQL,
@@ -402,6 +428,31 @@ func addColumnIfMissingStatements(table string, columns []columnDefinition) []st
 			sqlIdentifier(table),
 			sqlIdentifier(column.name),
 			column.definition,
+		))
+	}
+
+	return statements
+}
+
+func addConstraintIfMissingStatements(table string, constraints []constraintDefinition) []string {
+	statements := make([]string, 0, len(constraints))
+	for _, constraint := range constraints {
+		statements = append(statements, fmt.Sprintf(`
+DO $$
+BEGIN
+	IF to_regclass(%s) IS NOT NULL AND NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conrelid = to_regclass(%s) AND conname = %s
+	) THEN
+		ALTER TABLE %s ADD CONSTRAINT %s %s NOT VALID;
+	END IF;
+END $$`,
+			sqlStringLiteral(sqlIdentifier(table)),
+			sqlStringLiteral(sqlIdentifier(table)),
+			sqlStringLiteral(constraint.name),
+			sqlIdentifier(table),
+			sqlIdentifier(constraint.name),
+			constraint.definition,
 		))
 	}
 
@@ -551,13 +602,13 @@ func (r *PostgresRepository) UpdateByIDForUser(ctx context.Context, userID strin
 		addSet("title", *input.Title)
 	}
 	if input.Artist != nil {
-		addSet("artist", *input.Artist)
+		addSet("artist", nullableStringArg(input.Artist))
 	}
 	if input.Album != nil {
-		addSet("album", *input.Album)
+		addSet("album", nullableStringArg(input.Album))
 	}
 	if input.Genre != nil {
-		addSet("genre", *input.Genre)
+		addSet("genre", nullableStringArg(input.Genre))
 	}
 	if input.ReleaseYear != nil {
 		addSet("releaseYear", *input.ReleaseYear)
@@ -745,6 +796,14 @@ func optionalString(value sql.NullString) *string {
 	}
 
 	return &value.String
+}
+
+func nullableStringArg(value *string) any {
+	if value == nil || *value == "" {
+		return nil
+	}
+
+	return *value
 }
 
 func optionalInt(value sql.NullInt64) *int {

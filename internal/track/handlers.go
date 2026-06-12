@@ -9,10 +9,20 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type TrackIDParams struct {
+	TrackID string `path:"trackID" validate:"required,max=128"`
+}
+
 type TracksResponse struct {
 	Success bool               `json:"success" example:"true"`
 	Status  string             `json:"status" example:"success"`
 	Data    TracksResponseData `json:"data"`
+}
+
+func TrackIDParamsFromRequest(r *http.Request) (TrackIDParams, error) {
+	return TrackIDParams{
+		TrackID: chi.URLParam(r, "trackID"),
+	}, nil
 }
 
 type TracksResponseData struct {

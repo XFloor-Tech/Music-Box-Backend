@@ -3,6 +3,7 @@ package track
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
@@ -31,14 +32,35 @@ func Setup(ctx context.Context, repo database.Repository, auth Authenticator) (*
 	}, nil
 }
 
-func (m *Module) RegisterRoutes(r chi.Router) {
+func (m *Module) RegisterRoutes(r chi.Router, middlewares ...func(http.Handler) http.Handler) {
 	if m == nil || m.service == nil {
 		return
 	}
 
+	trackIDMiddleware := middlewareAt(middlewares, 0)
+	batchDeleteMiddleware := middlewareAt(middlewares, 1)
+
 	r.Get("/tracks", m.handleListTracks)
-	r.Post("/tracks/batch-delete", m.handleBatchDeleteTracks)
-	r.Get("/tracks/{trackID}", m.handleGetTrack)
-	r.Patch("/tracks/{trackID}", m.handleUpdateTrack)
-	r.Delete("/tracks/{trackID}", m.handleDeleteTrack)
+	r.With(optionalMiddleware(batchDeleteMiddleware)).Post("/tracks/batch-delete", m.handleBatchDeleteTracks)
+	r.With(optionalMiddleware(trackIDMiddleware)).Get("/tracks/{trackID}", m.handleGetTrack)
+	r.With(optionalMiddleware(trackIDMiddleware)).Patch("/tracks/{trackID}", m.handleUpdateTrack)
+	r.With(optionalMiddleware(trackIDMiddleware)).Delete("/tracks/{trackID}", m.handleDeleteTrack)
+}
+
+func middlewareAt(middlewares []func(http.Handler) http.Handler, index int) func(http.Handler) http.Handler {
+	if index >= 0 && index < len(middlewares) {
+		return middlewares[index]
+	}
+
+	return nil
+}
+
+func optionalMiddleware(middleware func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	if middleware != nil {
+		return middleware
+	}
+
+	return func(next http.Handler) http.Handler {
+		return next
+	}
 }
