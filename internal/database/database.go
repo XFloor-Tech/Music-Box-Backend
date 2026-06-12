@@ -42,7 +42,7 @@ type Postgres struct {
 
 var _ Service = (*Postgres)(nil)
 
-func ConfigFromViper() (Config, error) {
+func GetConfig() (Config, error) {
 	maxConnections := viper.GetInt("database.max_connections")
 	if maxConnections < 1 {
 		return Config{}, errors.New("database.max_connections must be greater than 0")

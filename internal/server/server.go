@@ -12,6 +12,7 @@ import (
 
 	authmodule "xfloor/music-box-backend/internal/auth"
 	"xfloor/music-box-backend/internal/database"
+	storagemodule "xfloor/music-box-backend/internal/storage"
 	trackmodule "xfloor/music-box-backend/internal/track"
 	usermodule "xfloor/music-box-backend/internal/user"
 )
@@ -21,6 +22,7 @@ type Server struct {
 	db           database.Service
 	auth         *authmodule.Module
 	user         *usermodule.Module
+	storage      *storagemodule.Module
 	track        *trackmodule.Module
 	logger       *zap.Logger
 	maxBodyBytes int64
@@ -52,6 +54,16 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
+	storageConfig, err := storagemodule.GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load storage config: %w", err)
+	}
+
+	storage, err := storagemodule.Setup(ctx, storageConfig)
+	if err != nil {
+		return nil, fmt.Errorf("initialize storage: %w", err)
+	}
+
 	authConfig, err := authmodule.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load auth config: %w", err)
@@ -77,6 +89,7 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		db:           db,
 		auth:         auth,
 		user:         users,
+		storage:      storage,
 		track:        tracks,
 		maxBodyBytes: maxBodyBytes,
 		validator:    NewRequestValidator(),
