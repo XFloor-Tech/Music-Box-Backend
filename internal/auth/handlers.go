@@ -17,7 +17,7 @@ type AuthUserResponse struct {
 	ID            string `json:"id" example:"usr_abc123"`
 	Email         string `json:"email" example:"user@example.com"`
 	Name          string `json:"name" example:"user"`
-	EmailVerified bool   `json:"email_verified" example:"false"`
+	EmailVerified bool   `json:"emailVerified" example:"false"`
 }
 
 type AuthResponse struct {
@@ -32,7 +32,7 @@ type AuthResponseData struct {
 }
 
 type AuthSessionResponse struct {
-	ExpiresAt time.Time `json:"expires_at"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 type AuthErrorResponse struct {

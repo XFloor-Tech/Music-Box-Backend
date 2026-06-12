@@ -39,11 +39,17 @@ and easy to extend as features are added.
 - Use Zap for application and request logging.
 - Keep PostgreSQL access behind service or repository boundaries rather than
   scattering SQL across handlers.
+- Keep PostgreSQL column names aligned with the existing schema. This project
+  intentionally uses camelCase database columns for camelCase domain/API fields
+  such as `"userId"`, `"releaseYear"`, `"createdAt"`, and `"updatedAt"`, so
+  quote those identifiers in SQL and schema artifacts.
 - Keep public JSON responses wrapped in a consistent envelope:
   - `success` is mandatory and must be `true` for successful requests and
     `false` for failed requests.
   - `status` should describe the outcome, such as `success`, `failure`, or
     route-specific values like `ok`.
+  - Response field names must be camel cased, including nested response
+    payloads such as `nextCursor`, `createdAt`, and `emailVerified`.
   - `data` contains only successful response payloads and should be omitted on
     errors.
   - `error` is an optional top-level string used only when a request fails.

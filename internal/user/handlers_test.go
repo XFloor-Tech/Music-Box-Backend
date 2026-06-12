@@ -55,7 +55,26 @@ func TestHandleMeReturnsAuthenticatedUser(t *testing.T) {
 		t.Fatalf("email = %q, want user@example.com", response.Data.User.Email)
 	}
 	if !response.Data.User.EmailVerified {
-		t.Fatal("email_verified = false, want true")
+		t.Fatal("emailVerified = false, want true")
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("Unmarshal() raw error = %v", err)
+	}
+	data, ok := raw["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %T, want object", raw["data"])
+	}
+	user, ok := data["user"].(map[string]any)
+	if !ok {
+		t.Fatalf("user = %T, want object", data["user"])
+	}
+	if user["emailVerified"] != true {
+		t.Fatalf("emailVerified = %v, want true", user["emailVerified"])
+	}
+	if _, ok := user["email_verified"]; ok {
+		t.Fatalf("email_verified = %v, want absent", user["email_verified"])
 	}
 }
 

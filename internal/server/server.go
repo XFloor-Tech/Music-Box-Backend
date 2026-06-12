@@ -12,6 +12,7 @@ import (
 
 	authmodule "xfloor/music-box-backend/internal/auth"
 	"xfloor/music-box-backend/internal/database"
+	trackmodule "xfloor/music-box-backend/internal/track"
 	usermodule "xfloor/music-box-backend/internal/user"
 )
 
@@ -20,6 +21,7 @@ type Server struct {
 	db           database.Service
 	auth         *authmodule.Module
 	user         *usermodule.Module
+	track        *trackmodule.Module
 	logger       *zap.Logger
 	maxBodyBytes int64
 	validator    *validator.Validate
@@ -65,11 +67,17 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		return nil, fmt.Errorf("initialize user module: %w", err)
 	}
 
+	tracks, err := trackmodule.Setup(ctx, db, auth)
+	if err != nil {
+		return nil, fmt.Errorf("initialize track module: %w", err)
+	}
+
 	s := &Server{
 		logger:       logger,
 		db:           db,
 		auth:         auth,
 		user:         users,
+		track:        tracks,
 		maxBodyBytes: maxBodyBytes,
 		validator:    NewRequestValidator(),
 	}

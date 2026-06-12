@@ -1,0 +1,214 @@
+package track
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+func TestEnsureSchemaRepairsLegacyTrackColumnsBeforeIndexes(t *testing.T) {
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+
+	if err := tracks.EnsureSchema(context.Background()); err != nil {
+		t.Fatalf("EnsureSchema() error = %v", err)
+	}
+
+	trackTableIndex := indexOfStatement(repo.statements, `CREATE TABLE IF NOT EXISTS "track"`)
+	trackRenameIndex := indexOfStatement(repo.statements, `RENAME COLUMN "release_year" TO "releaseYear"`)
+	trackAddIndex := indexOfStatement(repo.statements, `ADD COLUMN IF NOT EXISTS "releaseYear" INTEGER`)
+	trackConstraintIndex := indexOfStatement(repo.statements, `ADD CONSTRAINT "track_release_year_valid"`)
+	trackIndexIndex := indexOfStatement(repo.statements, `track_user_created_at_id_idx`)
+	if trackTableIndex == -1 || trackRenameIndex == -1 || trackAddIndex == -1 || trackConstraintIndex == -1 || trackIndexIndex == -1 {
+		t.Fatalf("track schema statements missing: table=%d rename=%d add=%d constraint=%d index=%d", trackTableIndex, trackRenameIndex, trackAddIndex, trackConstraintIndex, trackIndexIndex)
+	}
+	if !(trackTableIndex < trackRenameIndex && trackRenameIndex < trackAddIndex && trackAddIndex < trackConstraintIndex && trackConstraintIndex < trackIndexIndex) {
+		t.Fatalf("track schema order = table:%d rename:%d add:%d constraint:%d index:%d, want table < rename < add < constraint < index", trackTableIndex, trackRenameIndex, trackAddIndex, trackConstraintIndex, trackIndexIndex)
+	}
+
+	mediaTableIndex := indexOfStatement(repo.statements, `CREATE TABLE IF NOT EXISTS track_media`)
+	mediaRenameIndex := indexOfStatement(repo.statements, `RENAME COLUMN "track_id" TO "trackId"`)
+	mediaAddIndex := indexOfStatement(repo.statements, `ADD COLUMN IF NOT EXISTS "storageProvider" track_storage_provider`)
+	mediaConstraintIndex := indexOfStatement(repo.statements, `ADD CONSTRAINT "track_media_checksum_sha256_hex"`)
+	mediaIndexIndex := indexOfStatement(repo.statements, `track_media_track_id_idx`)
+	if mediaTableIndex == -1 || mediaRenameIndex == -1 || mediaAddIndex == -1 || mediaConstraintIndex == -1 || mediaIndexIndex == -1 {
+		t.Fatalf("track media schema statements missing: table=%d rename=%d add=%d constraint=%d index=%d", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaConstraintIndex, mediaIndexIndex)
+	}
+	if !(mediaTableIndex < mediaRenameIndex && mediaRenameIndex < mediaAddIndex && mediaAddIndex < mediaConstraintIndex && mediaConstraintIndex < mediaIndexIndex) {
+		t.Fatalf("track media schema order = table:%d rename:%d add:%d constraint:%d index:%d, want table < rename < add < constraint < index", mediaTableIndex, mediaRenameIndex, mediaAddIndex, mediaConstraintIndex, mediaIndexIndex)
+	}
+
+	for _, fragment := range []string{
+		`ADD CONSTRAINT "track_title_not_empty"`,
+		`ADD CONSTRAINT "track_metadata_object"`,
+		`ADD CONSTRAINT "track_media_metadata_object"`,
+		`NOT VALID`,
+	} {
+		if indexOfStatement(repo.statements, fragment) == -1 {
+			t.Fatalf("schema statements do not contain %s", fragment)
+		}
+	}
+}
+
+func TestTrackQueriesUseCamelCaseDatabaseColumns(t *testing.T) {
+	for _, fragment := range []string{
+		`"userId"`,
+		`"releaseYear"`,
+		`"trackNumber"`,
+		`"discNumber"`,
+		`"durationMs"`,
+		`"createdAt"`,
+		`"updatedAt"`,
+	} {
+		if !strings.Contains(trackSelectColumns, fragment) {
+			t.Fatalf("trackSelectColumns does not contain %s", fragment)
+		}
+	}
+
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+	_, _ = tracks.ListByUserID(context.Background(), "usr_123", ListTracksOptions{
+		Limit: 20,
+		Cursor: &TrackListCursor{
+			CreatedAt: time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC),
+			ID:        "trk_123",
+		},
+	})
+
+	query := repo.lastQuery
+	for _, fragment := range []string{
+		`"userId" = $1`,
+		`("createdAt", id)`,
+		`ORDER BY "createdAt" DESC`,
+	} {
+		if !strings.Contains(query, fragment) {
+			t.Fatalf("list query does not contain %s:\n%s", fragment, query)
+		}
+	}
+}
+
+func TestTrackMutationQueriesUseCamelCaseDatabaseColumns(t *testing.T) {
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+	title := "Song"
+	visibility := VisibilityPublic
+
+	_, _, _ = tracks.UpdateByIDForUser(context.Background(), "usr_123", "trk_123", UpdateTrackInput{
+		Title:      &title,
+		Visibility: &visibility,
+	})
+
+	updateQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`"title" = $3`,
+		`visibility = $4::track_visibility`,
+		`"updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`status <> 'deleted'::track_status`,
+	} {
+		if !strings.Contains(updateQuery, fragment) {
+			t.Fatalf("update query does not contain %s:\n%s", fragment, updateQuery)
+		}
+	}
+
+	_, _, _ = tracks.SoftDeleteByIDForUser(context.Background(), "usr_123", "trk_123")
+
+	deleteQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`SET status = 'deleted'::track_status, "updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`status <> 'deleted'::track_status`,
+	} {
+		if !strings.Contains(deleteQuery, fragment) {
+			t.Fatalf("delete query does not contain %s:\n%s", fragment, deleteQuery)
+		}
+	}
+
+	_, _ = tracks.BatchSoftDeleteByIDs(context.Background(), "usr_123", []string{"trk_1", "trk_2"})
+
+	batchDeleteQuery := repo.lastQuery
+	for _, fragment := range []string{
+		`SET status = 'deleted'::track_status, "updatedAt" = NOW()`,
+		`"userId" = $1`,
+		`id IN ($2, $3)`,
+		`RETURNING id`,
+	} {
+		if !strings.Contains(batchDeleteQuery, fragment) {
+			t.Fatalf("batch delete query does not contain %s:\n%s", fragment, batchDeleteQuery)
+		}
+	}
+}
+
+func TestTrackMutationStoresBlankNullableStringsAsNull(t *testing.T) {
+	repo := &recordingRepository{}
+	tracks := NewPostgresRepository(repo)
+	blank := ""
+
+	_, _, _ = tracks.UpdateByIDForUser(context.Background(), "usr_123", "trk_123", UpdateTrackInput{
+		Artist: &blank,
+		Album:  &blank,
+		Genre:  &blank,
+	})
+
+	if len(repo.lastArgs) < 5 {
+		t.Fatalf("last args len = %d, want at least 5", len(repo.lastArgs))
+	}
+	for i, arg := range repo.lastArgs[2:5] {
+		if arg != nil {
+			t.Fatalf("nullable string arg %d = %#v, want nil", i, arg)
+		}
+	}
+}
+
+func indexOfStatement(statements []string, needle string) int {
+	for i, statement := range statements {
+		if strings.Contains(statement, needle) {
+			return i
+		}
+	}
+
+	return -1
+}
+
+type recordingRepository struct {
+	statements []string
+	lastQuery  string
+	lastArgs   []any
+}
+
+func (r *recordingRepository) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	r.statements = append(r.statements, query)
+	return pgconn.CommandTag{}, nil
+}
+
+func (r *recordingRepository) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
+	r.lastQuery = query
+	r.lastArgs = append([]any(nil), args...)
+	return emptyRows{}, nil
+}
+
+func (r *recordingRepository) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
+	r.lastQuery = query
+	r.lastArgs = append([]any(nil), args...)
+	return noRowsRow{}
+}
+
+type noRowsRow struct{}
+
+func (noRowsRow) Scan(dest ...any) error { return pgx.ErrNoRows }
+
+type emptyRows struct{}
+
+func (emptyRows) Close()                                       {}
+func (emptyRows) Err() error                                   { return nil }
+func (emptyRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (emptyRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (emptyRows) Next() bool                                   { return false }
+func (emptyRows) Scan(dest ...any) error                       { return nil }
+func (emptyRows) Values() ([]any, error)                       { return nil, nil }
+func (emptyRows) RawValues() [][]byte                          { return nil }
+func (emptyRows) Conn() *pgx.Conn                              { return nil }

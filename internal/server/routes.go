@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	authmodule "xfloor/music-box-backend/internal/auth"
+	trackmodule "xfloor/music-box-backend/internal/track"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -32,6 +33,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	if s.user != nil {
 		s.user.RegisterRoutes(r)
+	}
+
+	if s.track != nil {
+		s.track.RegisterRoutes(
+			r,
+			WithValidatedParams[trackmodule.TrackIDParams](trackmodule.TrackIDParamsFromRequest),
+			WithValidatedJSON[trackmodule.BatchDeleteTracksRequest](),
+		)
 	}
 
 	r.Get("/health", s.healthCheck)
