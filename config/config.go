@@ -26,6 +26,13 @@ func Load() error {
 	viper.RegisterAlias("database.addr", "DATABASE_ADDR")
 	viper.RegisterAlias("database.max_connections", "DATABASE_MAX_CONNECTIONS")
 
+	viper.RegisterAlias("storage.account_id", "STORAGE_ACCOUNT_ID")
+	viper.RegisterAlias("storage.access_key_id", "STORAGE_ACCESS_KEY_ID")
+	viper.RegisterAlias("storage.secret_access_key", "STORAGE_SECRET_ACCESS_KEY")
+	viper.RegisterAlias("storage.bucket", "STORAGE_BUCKET")
+	viper.RegisterAlias("storage.presign_put_expiry", "STORAGE_PRESIGN_PUT_EXPIRY")
+	viper.RegisterAlias("storage.presign_get_expiry", "STORAGE_PRESIGN_GET_EXPIRY")
+
 	viper.RegisterAlias("auth.mount_path", "AUTH_MOUNT_PATH")
 	viper.RegisterAlias("auth.root_url", "AUTH_ROOT_URL")
 	viper.RegisterAlias("auth.session_cookie_name", "AUTH_SESSION_COOKIE_NAME")
@@ -46,6 +53,12 @@ func Load() error {
 	viper.SetDefault("server.max_header_bytes", 1024*1024)
 	viper.SetDefault("database.addr", "")
 	viper.SetDefault("database.max_connections", 10)
+	viper.SetDefault("storage.account_id", "")
+	viper.SetDefault("storage.access_key_id", "")
+	viper.SetDefault("storage.secret_access_key", "")
+	viper.SetDefault("storage.bucket", "")
+	viper.SetDefault("storage.presign_put_expiry", "15m")
+	viper.SetDefault("storage.presign_get_expiry", "15m")
 
 	viper.SetDefault("auth.mount_path", "/auth")
 	viper.SetDefault("auth.root_url", "")
