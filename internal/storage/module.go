@@ -27,6 +27,10 @@ func Setup(ctx context.Context, cfg Config) (*Module, error) {
 		return nil, err
 	}
 
+	if err := service.HeadBucket(ctx); err != nil {
+		return nil, fmt.Errorf("validate storage bucket: %w", err)
+	}
+
 	return &Module{
 		service: service,
 	}, nil
