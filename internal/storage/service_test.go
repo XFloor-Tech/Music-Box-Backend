@@ -3,11 +3,13 @@ package storage
 import (
 	"context"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -157,10 +159,121 @@ func TestDeleteObjectUsesConfiguredBucket(t *testing.T) {
 	}
 }
 
+func TestPresignPutObjectUsesFolderFileNameAndConfiguredExpiry(t *testing.T) {
+	client := &recordingObjectClient{}
+	presigner := &recordingPresignClient{
+		putOutput: &v4.PresignedHTTPRequest{
+			Method: http.MethodPut,
+			URL:    "https://example.com/upload",
+			SignedHeader: http.Header{
+				"Content-Type": []string{ContentTypeInitMP4},
+			},
+		},
+	}
+	service := testServiceWithPresigner(t, client, presigner)
+	sizeBytes := int64(42)
+
+	result, err := service.PresignPutObject(context.Background(), PresignPutObjectInput{
+		Folder:      " /tracks/trk_123/original/ ",
+		FileName:    " source.m4a ",
+		ContentType: ContentTypeInitMP4,
+		SizeBytes:   &sizeBytes,
+		Metadata: map[string]string{
+			"trackId": "trk_123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PresignPutObject() error = %v", err)
+	}
+
+	if aws.ToString(presigner.putInput.Bucket) != "music-box-media" {
+		t.Fatalf("presign put bucket = %q, want configured bucket", aws.ToString(presigner.putInput.Bucket))
+	}
+	if aws.ToString(presigner.putInput.Key) != "tracks/trk_123/original/source.m4a" {
+		t.Fatalf("presign put key = %q, want normalized key", aws.ToString(presigner.putInput.Key))
+	}
+	if aws.ToString(presigner.putInput.ContentType) != ContentTypeInitMP4 {
+		t.Fatalf("presign put content type = %q, want %q", aws.ToString(presigner.putInput.ContentType), ContentTypeInitMP4)
+	}
+	if presigner.putInput.ContentLength == nil || *presigner.putInput.ContentLength != sizeBytes {
+		t.Fatalf("presign put content length = %v, want %d", presigner.putInput.ContentLength, sizeBytes)
+	}
+	if presigner.putInput.Metadata["trackId"] != "trk_123" {
+		t.Fatalf("presign put metadata = %#v, want trackId", presigner.putInput.Metadata)
+	}
+	if presigner.putOptions.Expires != 10*time.Minute {
+		t.Fatalf("presign put expiry = %s, want 10m", presigner.putOptions.Expires)
+	}
+	if result.Method != http.MethodPut || result.URL != "https://example.com/upload" {
+		t.Fatalf("result method/url = %s %q, want PUT upload URL", result.Method, result.URL)
+	}
+	if result.Key != "tracks/trk_123/original/source.m4a" {
+		t.Fatalf("result key = %q, want normalized key", result.Key)
+	}
+	if result.Headers.Get("Content-Type") != ContentTypeInitMP4 {
+		t.Fatalf("result Content-Type header = %q, want %q", result.Headers.Get("Content-Type"), ContentTypeInitMP4)
+	}
+	if result.ExpiresIn != 10*time.Minute {
+		t.Fatalf("result ExpiresIn = %s, want 10m", result.ExpiresIn)
+	}
+}
+
+func TestPresignGetObjectUsesConfiguredExpiry(t *testing.T) {
+	client := &recordingObjectClient{}
+	presigner := &recordingPresignClient{
+		getOutput: &v4.PresignedHTTPRequest{
+			Method:       http.MethodGet,
+			URL:          "https://example.com/playback",
+			SignedHeader: http.Header{},
+		},
+	}
+	service := testServiceWithPresigner(t, client, presigner)
+
+	result, err := service.PresignGetObject(context.Background(), " tracks/trk_123/playback/manifest.mpd ")
+	if err != nil {
+		t.Fatalf("PresignGetObject() error = %v", err)
+	}
+
+	if aws.ToString(presigner.getInput.Bucket) != "music-box-media" {
+		t.Fatalf("presign get bucket = %q, want configured bucket", aws.ToString(presigner.getInput.Bucket))
+	}
+	if aws.ToString(presigner.getInput.Key) != "tracks/trk_123/playback/manifest.mpd" {
+		t.Fatalf("presign get key = %q, want trimmed key", aws.ToString(presigner.getInput.Key))
+	}
+	if presigner.getOptions.Expires != 30*time.Minute {
+		t.Fatalf("presign get expiry = %s, want 30m", presigner.getOptions.Expires)
+	}
+	if result.Method != http.MethodGet || result.URL != "https://example.com/playback" {
+		t.Fatalf("result method/url = %s %q, want GET playback URL", result.Method, result.URL)
+	}
+	if result.ExpiresIn != 30*time.Minute {
+		t.Fatalf("result ExpiresIn = %s, want 30m", result.ExpiresIn)
+	}
+}
+
+func TestObjectKeyRejectsNestedFileName(t *testing.T) {
+	_, err := ObjectKey("tracks/trk_123/original", "nested/source.m4a")
+	if err == nil {
+		t.Fatal("ObjectKey() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "fileName must not contain path separators") {
+		t.Fatalf("error = %q, want path separator error", err.Error())
+	}
+}
+
 func testService(t *testing.T, client ObjectClient) *Service {
 	t.Helper()
 
-	service, err := NewService("music-box-media", client)
+	return testServiceWithPresigner(t, client, &recordingPresignClient{})
+}
+
+func testServiceWithPresigner(t *testing.T, client ObjectClient, presigner PresignClient) *Service {
+	t.Helper()
+
+	service, err := NewService("music-box-media", client, presigner, PresignConfig{
+		PutExpiry: 10 * time.Minute,
+		GetExpiry: 30 * time.Minute,
+	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -227,4 +340,45 @@ func (c *recordingObjectClient) ListObjectsV2(ctx context.Context, input *s3.Lis
 	}
 
 	return &s3.ListObjectsV2Output{}, nil
+}
+
+type recordingPresignClient struct {
+	putInput   *s3.PutObjectInput
+	putOptions s3.PresignOptions
+	putOutput  *v4.PresignedHTTPRequest
+	getInput   *s3.GetObjectInput
+	getOptions s3.PresignOptions
+	getOutput  *v4.PresignedHTTPRequest
+}
+
+func (c *recordingPresignClient) PresignPutObject(ctx context.Context, input *s3.PutObjectInput, options ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	c.putInput = input
+	for _, option := range options {
+		option(&c.putOptions)
+	}
+	if c.putOutput != nil {
+		return c.putOutput, nil
+	}
+
+	return &v4.PresignedHTTPRequest{
+		Method:       http.MethodPut,
+		URL:          "https://example.com/upload",
+		SignedHeader: http.Header{},
+	}, nil
+}
+
+func (c *recordingPresignClient) PresignGetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	c.getInput = input
+	for _, option := range options {
+		option(&c.getOptions)
+	}
+	if c.getOutput != nil {
+		return c.getOutput, nil
+	}
+
+	return &v4.PresignedHTTPRequest{
+		Method:       http.MethodGet,
+		URL:          "https://example.com/playback",
+		SignedHeader: http.Header{},
+	}, nil
 }

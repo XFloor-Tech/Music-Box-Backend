@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -27,9 +29,29 @@ type ObjectClient interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
+type PresignClient interface {
+	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignGetObject(context.Context, *s3.GetObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+}
+
+type PresignConfig struct {
+	PutExpiry time.Duration
+	GetExpiry time.Duration
+}
+
 type Service struct {
-	bucket string
-	client ObjectClient
+	bucket        string
+	client        ObjectClient
+	presigner     PresignClient
+	presignConfig PresignConfig
+}
+
+type PresignPutObjectInput struct {
+	Folder      string
+	FileName    string
+	ContentType string
+	SizeBytes   *int64
+	Metadata    map[string]string
 }
 
 type PutObjectInput struct {
@@ -71,7 +93,17 @@ type ListObjectsResult struct {
 	NextCursor *string
 }
 
-func NewService(bucket string, client ObjectClient) (*Service, error) {
+type PresignedURL struct {
+	Bucket    string
+	Key       string
+	URL       string
+	Method    string
+	Headers   http.Header
+	ExpiresIn time.Duration
+	ExpiresAt time.Time
+}
+
+func NewService(bucket string, client ObjectClient, presigner PresignClient, presignConfig PresignConfig) (*Service, error) {
 	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
 		return nil, fmt.Errorf("storage bucket is required")
@@ -79,10 +111,18 @@ func NewService(bucket string, client ObjectClient) (*Service, error) {
 	if client == nil {
 		return nil, fmt.Errorf("storage client is required")
 	}
+	if presigner == nil {
+		return nil, fmt.Errorf("storage presigner is required")
+	}
+	if err := validatePresignConfig(presignConfig); err != nil {
+		return nil, err
+	}
 
 	return &Service{
-		bucket: bucket,
-		client: client,
+		bucket:        bucket,
+		client:        client,
+		presigner:     presigner,
+		presignConfig: presignConfig,
 	}, nil
 }
 
@@ -92,6 +132,60 @@ func (s *Service) Bucket() string {
 	}
 
 	return s.bucket
+}
+
+func (s *Service) PresignPutObject(ctx context.Context, input PresignPutObjectInput) (PresignedURL, error) {
+	if err := s.ensurePresignerConfigured(); err != nil {
+		return PresignedURL{}, err
+	}
+
+	key, err := ObjectKey(input.Folder, input.FileName)
+	if err != nil {
+		return PresignedURL{}, err
+	}
+	if input.SizeBytes != nil && *input.SizeBytes < 0 {
+		return PresignedURL{}, fmt.Errorf("storage object sizeBytes must be greater than or equal to 0")
+	}
+
+	putInput := &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		ContentLength: input.SizeBytes,
+		Metadata:      copyMetadata(input.Metadata),
+	}
+	if contentType := strings.TrimSpace(input.ContentType); contentType != "" {
+		putInput.ContentType = aws.String(contentType)
+	}
+
+	expiry := s.presignConfig.PutExpiry
+	request, err := s.presigner.PresignPutObject(ctx, putInput, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return PresignedURL{}, fmt.Errorf("presign put storage object %q: %w", key, err)
+	}
+
+	return presignedURLFromRequest(s.bucket, key, request, expiry), nil
+}
+
+func (s *Service) PresignGetObject(ctx context.Context, key string) (PresignedURL, error) {
+	if err := s.ensurePresignerConfigured(); err != nil {
+		return PresignedURL{}, err
+	}
+
+	key, err := objectKey(key)
+	if err != nil {
+		return PresignedURL{}, err
+	}
+
+	expiry := s.presignConfig.GetExpiry
+	request, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return PresignedURL{}, fmt.Errorf("presign get storage object %q: %w", key, err)
+	}
+
+	return presignedURLFromRequest(s.bucket, key, request, expiry), nil
 }
 
 func (s *Service) HeadBucket(ctx context.Context) error {
@@ -283,6 +377,52 @@ func (s *Service) ensureConfigured() error {
 	return nil
 }
 
+func (s *Service) ensurePresignerConfigured() error {
+	if s == nil || s.bucket == "" || s.presigner == nil {
+		return fmt.Errorf("storage presigner is not configured")
+	}
+	if err := validatePresignConfig(s.presignConfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validatePresignConfig(cfg PresignConfig) error {
+	if cfg.PutExpiry <= 0 {
+		return fmt.Errorf("storage presign put expiry must be greater than 0")
+	}
+	if cfg.PutExpiry > maxPresignExpiry {
+		return fmt.Errorf("storage presign put expiry must be less than or equal to %s", maxPresignExpiry)
+	}
+	if cfg.GetExpiry <= 0 {
+		return fmt.Errorf("storage presign get expiry must be greater than 0")
+	}
+	if cfg.GetExpiry > maxPresignExpiry {
+		return fmt.Errorf("storage presign get expiry must be less than or equal to %s", maxPresignExpiry)
+	}
+
+	return nil
+}
+
+func ObjectKey(folder string, fileName string) (string, error) {
+	folder, err := normalizeObjectFolder(folder)
+	if err != nil {
+		return "", err
+	}
+
+	fileName, err = normalizeObjectFileName(fileName)
+	if err != nil {
+		return "", err
+	}
+
+	if folder == "" {
+		return objectKey(fileName)
+	}
+
+	return objectKey(folder + "/" + fileName)
+}
+
 func objectKey(key string) (string, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
@@ -290,6 +430,47 @@ func objectKey(key string) (string, error) {
 	}
 
 	return key, nil
+}
+
+func normalizeObjectFolder(folder string) (string, error) {
+	folder = strings.Trim(strings.TrimSpace(folder), "/")
+	if folder == "" {
+		return "", nil
+	}
+
+	parts := strings.Split(folder, "/")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if part == "." || part == ".." {
+			return "", fmt.Errorf("storage object folder must not contain relative path segments")
+		}
+
+		normalized = append(normalized, part)
+	}
+	if len(normalized) == 0 {
+		return "", nil
+	}
+
+	return strings.Join(normalized, "/"), nil
+}
+
+func normalizeObjectFileName(fileName string) (string, error) {
+	fileName = strings.Trim(strings.TrimSpace(fileName), "/")
+	if fileName == "" {
+		return "", fmt.Errorf("storage object fileName is required")
+	}
+	if strings.Contains(fileName, "/") {
+		return "", fmt.Errorf("storage object fileName must not contain path separators")
+	}
+	if fileName == "." || fileName == ".." {
+		return "", fmt.Errorf("storage object fileName must not be a relative path segment")
+	}
+
+	return fileName, nil
 }
 
 func objectInfoFromListObject(bucket string, object types.Object) ObjectInfo {
@@ -313,4 +494,25 @@ func copyMetadata(metadata map[string]string) map[string]string {
 	}
 
 	return copied
+}
+
+func presignedURLFromRequest(bucket string, key string, request *v4.PresignedHTTPRequest, expiry time.Duration) PresignedURL {
+	headers := http.Header{}
+	if request != nil && request.SignedHeader != nil {
+		headers = request.SignedHeader.Clone()
+	}
+
+	result := PresignedURL{
+		Bucket:    bucket,
+		Key:       key,
+		Headers:   headers,
+		ExpiresIn: expiry,
+		ExpiresAt: time.Now().UTC().Add(expiry),
+	}
+	if request != nil {
+		result.URL = request.URL
+		result.Method = request.Method
+	}
+
+	return result
 }

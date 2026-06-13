@@ -19,7 +19,10 @@ func Setup(ctx context.Context, cfg Config) (*Module, error) {
 		return nil, fmt.Errorf("initialize r2 client: %w", err)
 	}
 
-	service, err := NewService(cfg.Bucket, client)
+	service, err := NewService(cfg.Bucket, client, NewR2PresignClient(client), PresignConfig{
+		PutExpiry: cfg.PresignPutExpiry,
+		GetExpiry: cfg.PresignGetExpiry,
+	})
 	if err != nil {
 		return nil, err
 	}

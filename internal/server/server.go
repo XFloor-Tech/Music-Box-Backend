@@ -41,7 +41,7 @@ func NewServer(logger *zap.Logger) (*Server, error) {
 		return nil, fmt.Errorf("server.max_header_bytes must be greater than 0")
 	}
 
-	dbConfig, err := database.ConfigFromViper()
+	dbConfig, err := database.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load database config: %w", err)
 	}

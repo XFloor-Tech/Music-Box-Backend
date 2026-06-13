@@ -33,3 +33,7 @@ func NewR2Client(ctx context.Context, cfg Config) (*s3.Client, error) {
 		options.BaseEndpoint = aws.String(endpoint)
 	}), nil
 }
+
+func NewR2PresignClient(client *s3.Client) *s3.PresignClient {
+	return s3.NewPresignClient(client)
+}
